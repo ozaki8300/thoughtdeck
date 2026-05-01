@@ -4,6 +4,7 @@ import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
 import { getTitle, isH1, isH2, isH3 } from "../lib/deckParser";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
+import { supabase } from "../lib/supabase";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1494,6 +1495,28 @@ export default function Home() {
     window.setTimeout(() => setCopyStatus(""), 1800);
   };
 
+  const saveToSupabase = async () => {
+    const { data, error } = await supabase
+      .from("decks")
+      .insert({ title, raw, memo, output })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const id = data?.id;
+
+    // ★ここ追加
+    const url = `${window.location.origin}/deck/${id}`;
+    setShareUrl(url);
+    setShowQr(true);
+
+    console.log("共有URL:", url);
+  };
+
   const saveToObsidian = async () => {
     const md = buildObsidianMarkdown(raw, addedCards, memo, output, starred);
     const timestamp = getTimestampSlug();
@@ -2263,6 +2286,7 @@ export default function Home() {
                     <button onClick={() => { setShowShortcutHelp(true); setOpenTopMenu(null); }} className={topButtonClass}>使い方</button>
                     <button onClick={() => { changePerspective(); setOpenTopMenu(null); }} className={topButtonClass}>視点: {perspective.label}</button>
                     <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>テンプレ</button>
+                    <button onClick={() => { saveToSupabase(); setOpenTopMenu(null); }} className={topButtonClass}>保存</button>
                   </div>
 
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
