@@ -1,73 +1,71 @@
-"use client";
+import { notFound } from "next/navigation";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
-export default function DeckPage() {
-  const params = useParams();
-  const rawId = params?.id;
+type DeckPageProps = {
+  params: Promise<{ id: string }>;
+};
 
-  // ⭐ 修正ポイント
-  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+type SharedDeck = {
+  title: string | null;
+  raw: string | null;
+  output: string | null;
+  memo: string | null;
+};
 
-  const [deck, setDeck] = useState<any>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+export default async function DeckPage({ params }: DeckPageProps) {
+  const { id } = await params;
 
-  useEffect(() => {
-    if (!id) return;
+  const { data, error } = await supabase
+    .from("decks")
+    .select("title, raw, output, memo")
+    .eq("id", id)
+    .maybeSingle<SharedDeck>();
 
-    const fetchDeck = async () => {
-      console.log("🟡 id:", id);
-
-      const res = await fetch(`/api/deck/${id}`);
-
-      const data = await res.json();
-
-      console.log("🔵 API response:", data);
-
-      if (res.status === 404) {
-        setNotFound(true);
-        return;
-      }
-
-      if (!res.ok) {
-        setErrorMsg(data?.error || "Deckの取得に失敗しました");
-        return;
-      }
-
-      if (!data) {
-        setErrorMsg("データが見つかりません");
-        return;
-      }
-
-      console.log("✅ data:", data);
-      setDeck(data);
-    };
-
-    fetchDeck();
-  }, [id]);
-
-  if (notFound) {
+  if (error) {
+    console.error("deck page fetch error:", error);
     return (
-      <div className="flex h-screen flex-col items-center justify-center text-white">
-        <h1 className="mb-4 text-2xl font-bold">このDeckは期限切れです</h1>
-        <p className="text-sm text-slate-400">
-          保存用URLから復元してください
-        </p>
-      </div>
+      <main className="min-h-screen bg-slate-950 px-5 py-10 text-slate-100">
+        <section className="mx-auto max-w-4xl rounded-xl border border-slate-700 bg-slate-900 p-6">
+          <h1 className="text-xl font-bold">Deckの取得に失敗しました</h1>
+          <p className="mt-3 text-sm text-slate-300">時間をおいてもう一度開いてください。</p>
+        </section>
+      </main>
     );
   }
 
-  if (errorMsg) return <div>{errorMsg}</div>;
-  if (!deck) return <div>読み込み中...</div>;
+  if (!data) notFound();
+
+  const title = data.title?.trim() || "タイトル未設定";
+  const raw = data.raw?.trim() || "（Inputなし）";
+  const output = data.output?.trim() || "（投稿文なし）";
+  const memo = data.memo?.trim() || "（メモなし）";
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>{deck.title}</h1>
-      <pre>{deck.raw}</pre>
-      <pre>{deck.memo}</pre>
-      <pre>{deck.output}</pre>
-    </div>
+    <main className="min-h-screen bg-slate-950 px-5 py-8 text-slate-100">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-6 border-b border-slate-800 pb-5">
+          <p className="text-sm text-blue-300">ThoughtDeck</p>
+          <h1 className="mt-2 text-2xl font-bold leading-tight">{title}</h1>
+        </header>
+
+        <div className="grid gap-5">
+          <ReadOnlySection title="Input" value={raw} />
+          <ReadOnlySection title="投稿文" value={output} />
+          <ReadOnlySection title="メモ" value={memo} />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function ReadOnlySection({ title, value }: { title: string; value: string }) {
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+      <h2 className="mb-3 text-base font-bold text-blue-300">{title}</h2>
+      <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-100">
+        {value}
+      </pre>
+    </section>
   );
 }

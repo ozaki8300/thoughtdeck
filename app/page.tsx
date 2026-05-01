@@ -10,6 +10,7 @@ import {
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
 } from "lz-string";
+import { useRouter } from "next/navigation";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -824,6 +825,7 @@ function buildObsidianMarkdown(
 }
 
 export default function Home() {
+  const router = useRouter();
   const [raw, setRaw] = useState(blankRaw);
   const [memo, setMemo] = useState("");
   const [output, setOutput] = useState("");
@@ -1526,7 +1528,8 @@ export default function Home() {
 
       markDirty(false);
 
-      const url = `${window.location.origin}/deck/${id}`;
+      const deckPath = `/deck/${id}`;
+      const url = `${window.location.origin}${deckPath}`;
       const longUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
 
       setShareUrl(url);
