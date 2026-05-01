@@ -8,6 +8,7 @@ type QRModalProps = {
   isOpen: boolean;
   title: string;
   shareUrl: string;
+  longUrl: string;
   qrError: string;
   onClose: () => void;
   onCopyUrl: () => void;
@@ -17,6 +18,7 @@ export function QRModal({
   isOpen,
   title,
   shareUrl,
+  longUrl,
   qrError,
   onClose,
   onCopyUrl,
@@ -70,7 +72,43 @@ export function QRModal({
         )}
 
         <div className="mt-4 w-full max-w-[560px] rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-[8.5pt] leading-[1.25] text-slate-100 shadow-2xl sm:text-[9.5pt]">
-          <p className="max-h-[3.8em] overflow-hidden break-all">{shareUrl}</p>
+          <p className="mb-2 text-[9.5pt] font-semibold text-slate-300">共有URL（30日で消えます）</p>
+          <div className="flex gap-2">
+            <input
+              value={shareUrl}
+              readOnly
+              className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-[8.5pt] text-slate-100 outline-none"
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(shareUrl);
+                onCopyUrl();
+              }}
+              className="shrink-0 rounded-lg border border-slate-500/80 bg-slate-900 px-3 py-2 text-[10pt] text-white transition hover:border-slate-200 hover:bg-slate-800"
+            >
+              コピー
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 w-full max-w-[560px] rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-[8.5pt] leading-[1.25] text-slate-100 shadow-2xl sm:text-[9.5pt]">
+          <p className="mb-2 text-[9.5pt] font-semibold text-slate-300">保存用URL（永久保存用）</p>
+          <div className="flex gap-2">
+            <input
+              value={longUrl}
+              readOnly
+              className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-[8.5pt] text-slate-100 outline-none"
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(longUrl);
+                onCopyUrl();
+              }}
+              className="shrink-0 rounded-lg border border-slate-500/80 bg-slate-900 px-3 py-2 text-[10pt] text-white transition hover:border-slate-200 hover:bg-slate-800"
+            >
+              コピー
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 grid w-full max-w-[560px] grid-cols-2 gap-3">

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",
+    "lz-string": "^1.5.0",
     "nanoid": "^3.3.12",
     "next": "16.2.4",
     "qrcode.react": "^4.2.0",

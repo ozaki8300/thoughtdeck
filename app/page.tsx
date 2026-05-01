@@ -6,6 +6,10 @@ import { createDeck, updateDeck } from "../lib/deckService";
 import { useCloudSave } from "../lib/useCloudSave";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
+import {
+  compressToEncodedURIComponent,
+  decompressFromEncodedURIComponent,
+} from "lz-string";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -160,12 +164,13 @@ const demoOutput = `Day2では、NPVやIRRといった定量指標の重要性�
 本ケースを通じて、投資判断とは数値評価だけでなく、どの前提に賭けるのか、どの構造を取りにいくのかを含めた意思決定であると学んだ。`;
 
 function encodeDeck(deck: DeckState) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(deck))));
+  return compressToEncodedURIComponent(JSON.stringify(deck));
 }
 
 function decodeDeck(value: string): DeckState | null {
   try {
-    return JSON.parse(decodeURIComponent(escape(atob(value))));
+    const json = decompressFromEncodedURIComponent(value);
+    return JSON.parse(json || "{}");
   } catch {
     return null;
   }
@@ -763,7 +768,7 @@ function buildRestoreUrl(
   if (typeof window === "undefined") return "";
   const base = `${window.location.origin}${window.location.pathname}`;
   const deck: DeckState = { raw, memo, output, addedCards, starred };
-  return `${base}?d=${encodeURIComponent(encodeDeck(deck))}`;
+  return `${base}?d=${encodeDeck(deck)}`;
 }
 
 function getActiveAreaEntries(block: { left: Card[]; center: Card[]; right: Card[] }) {
@@ -830,6 +835,7 @@ export default function Home() {
   const [obsidianToast, setObsidianToast] = useState("");
   const [showQr, setShowQr] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [longUrl, setLongUrl] = useState("");
   const [qrError, setQrError] = useState("");
   const [deckId, setDeckId] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -1521,8 +1527,10 @@ export default function Home() {
       markDirty(false);
 
       const url = `${window.location.origin}/deck/${id}`;
+      const longUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
 
       setShareUrl(url);
+      setLongUrl(longUrl);
       setQrError("");
       setShowQr(true);
 
@@ -1577,6 +1585,7 @@ export default function Home() {
     setStarred([]);
 
     setShareUrl("");
+    setLongUrl("");
     setQrError("");
     setShowQr(false);
 
@@ -1597,6 +1606,7 @@ export default function Home() {
     setAddedCards([]);
     setStarred([]);
     setShareUrl("");
+    setLongUrl("");
     setQrError("");
     setShowQr(false);
     setSelectedCardId(null);
@@ -2427,6 +2437,7 @@ export default function Home() {
         isOpen={showQr}
         title={title}
         shareUrl={shareUrl}
+        longUrl={longUrl}
         qrError={qrError}
         onClose={() => setShowQr(false)}
         onCopyUrl={() => setCopyStatus("URLをコピーしました")}
