@@ -3,11 +3,12 @@
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
 import { getTitle, isH1, isH2, isH3 } from "../lib/deckParser";
 import { createDeck, updateDeck } from "../lib/deckService";
+import { useCloudSave } from "../lib/useCloudSave";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ParsedCard = {
   id: string;
@@ -928,12 +929,17 @@ export default function Home() {
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfWorkMode, setPdfWorkMode] = useState<PdfWorkMode>("thought");
   const [draggingPdf, setDraggingPdf] = useState(false);
-  const cloudDirtyRef = useRef(false);
-  const cloudSaveInFlightRef = useRef(false);
-  const latestCloudDeckRef = useRef({ title: "", raw: "", memo: "", output: "" });
 
   const parsedDeck = useMemo(() => parseDeck(raw), [raw]);
   const { title, topSections, bottomSections } = parsedDeck;
+  const getLatestCloudDeck = useCallback(
+    () => ({ title, raw, memo, output }),
+    [title, raw, memo, output],
+  );
+  const { markDirty } = useCloudSave({
+    deckId,
+    getLatest: getLatestCloudDeck,
+  });
   const parsedCards = parsedDeck.cards;
   const allCards = useMemo<Card[]>(
     () => [...parsedCards, ...addedCards],
@@ -1091,8 +1097,7 @@ export default function Home() {
   };
 
   const markCloudDirty = () => {
-    if (!deckId) return;
-    cloudDirtyRef.current = true;
+    markDirty();
   };
 
   const resolveTextStateAction = (value: SetStateAction<string>, current: string) =>
@@ -1277,86 +1282,6 @@ export default function Home() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [raw, memo, output, addedCards, starred]);
-
-  useEffect(() => {
-    latestCloudDeckRef.current = { title, raw, memo, output };
-  }, [title, raw, memo, output]);
-
-  useEffect(() => {
-    const sendCloudSave = (reason: "beforeunload" | "visibilitychange") => {
-      if (!deckId || !cloudDirtyRef.current) return;
-      if (reason === "visibilitychange" && cloudSaveInFlightRef.current) return;
-
-      const payload = JSON.stringify({
-        id: deckId,
-        ...latestCloudDeckRef.current,
-      });
-
-      if (navigator.sendBeacon) {
-        const queued = navigator.sendBeacon(
-          "/api/deck/save",
-          new Blob([payload], { type: "application/json" }),
-        );
-        if (queued) {
-          cloudDirtyRef.current = false;
-          return;
-        }
-      }
-
-      if (reason === "beforeunload") return;
-
-      cloudSaveInFlightRef.current = true;
-      fetch("/api/deck/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-        keepalive: true,
-      })
-        .then(() => {
-          cloudDirtyRef.current = false;
-        })
-        .catch((error) => {
-          console.error(`${reason} save error:`, error);
-        })
-        .finally(() => {
-          cloudSaveInFlightRef.current = false;
-        });
-    };
-
-    const saveOnUnload = () => {
-      sendCloudSave("beforeunload");
-    };
-
-    const saveOnHidden = () => {
-      if (document.visibilityState === "hidden") {
-        sendCloudSave("visibilitychange");
-      }
-    };
-
-    window.addEventListener("beforeunload", saveOnUnload);
-    document.addEventListener("visibilitychange", saveOnHidden);
-    return () => {
-      window.removeEventListener("beforeunload", saveOnUnload);
-      document.removeEventListener("visibilitychange", saveOnHidden);
-    };
-  }, [deckId]);
-
-  useEffect(() => {
-    if (!deckId) return;
-
-    const timer = window.setTimeout(async () => {
-      if (!cloudDirtyRef.current) return;
-
-      try {
-        await updateDeck(deckId, latestCloudDeckRef.current);
-        cloudDirtyRef.current = false;
-      } catch (e) {
-        console.error("idle save error:", e);
-      }
-    }, 60000);
-
-    return () => window.clearTimeout(timer);
-  }, [title, raw, memo, output, deckId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1593,7 +1518,7 @@ export default function Home() {
         }
       }
 
-      cloudDirtyRef.current = false;
+      markDirty(false);
 
       const url = `${window.location.origin}/deck/${id}`;
 
