@@ -1,0 +1,83 @@
+import { NextResponse } from "next/server";
+import { supabase } from "../../../../lib/supabase";
+
+// 🔸 サーバー内で共有される簡易メモリ（インスタンス単位）
+let lastCleanup = 0;
+
+export async function GET(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    // =========================
+    // ① ID取得（Next16対応）
+    // =========================
+    const { id } = await context.params;
+
+    if (!id) {
+      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    }
+
+    // =========================
+    // ② データ取得（先に返す）
+    // =========================
+    const { data, error } = await supabase
+      .from("decks")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: "Database error" }, { status: 500 });
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: "Deck not found (expired)" },
+        { status: 404 }
+      );
+    }
+
+    // =========================
+    // ③ 軽量クリーンアップ（非同期）
+    // =========================
+    const now = Date.now();
+
+    // 👉 10秒に1回だけ削除（超重要）
+    if (now - lastCleanup > 10_000) {
+      lastCleanup = now;
+
+      (async () => {
+        try {
+          const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+          const { error } = await supabase
+            .from("decks")
+            .delete()
+            .lt(
+              "created_at",
+              new Date(now - THIRTY_DAYS).toISOString()
+            );
+
+          if (error) {
+            console.error("cleanup error:", error);
+          } else {
+            console.log("cleanup done");
+          }
+        } catch (e) {
+          console.error("cleanup unexpected:", e);
+        }
+      })();
+    }
+
+    // =========================
+    return NextResponse.json(data);
+
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json(
+      { error: "Unexpected error" },
+      { status: 500 }
+    );
+  }
+}

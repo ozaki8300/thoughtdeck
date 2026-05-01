@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { supabase } from "../../../lib/supabase";
 
 export default function DeckPage() {
   const params = useParams();
-  const id = params?.id as string;
+  const rawId = params?.id;
+
+  // ⭐ 修正ポイント
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [deck, setDeck] = useState<any>(null);
+  const [notFound, setNotFound] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -17,15 +20,19 @@ export default function DeckPage() {
     const fetchDeck = async () => {
       console.log("🟡 id:", id);
 
-      const { data, error } = await supabase
-        .from("decks")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
+      const res = await fetch(`/api/deck/${id}`);
 
-      if (error) {
-        console.error("❌ supabase error:", error);
-        setErrorMsg(error.message);
+      const data = await res.json();
+
+      console.log("🔵 API response:", data);
+
+      if (res.status === 404) {
+        setNotFound(true);
+        return;
+      }
+
+      if (!res.ok) {
+        setErrorMsg(data?.error || "Deckの取得に失敗しました");
         return;
       }
 
@@ -40,6 +47,17 @@ export default function DeckPage() {
 
     fetchDeck();
   }, [id]);
+
+  if (notFound) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center text-white">
+        <h1 className="mb-4 text-2xl font-bold">このDeckは期限切れです</h1>
+        <p className="text-sm text-slate-400">
+          保存用URLから復元してください
+        </p>
+      </div>
+    );
+  }
 
   if (errorMsg) return <div>{errorMsg}</div>;
   if (!deck) return <div>読み込み中...</div>;
