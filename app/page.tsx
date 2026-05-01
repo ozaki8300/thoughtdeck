@@ -1459,21 +1459,26 @@ export default function Home() {
   };
 
   const createShare = async () => {
-    const base = `${window.location.origin}${window.location.pathname}`;
-    const deck: DeckState = { raw, memo, output, addedCards, starred };
-    const url = `${base}?d=${encodeURIComponent(encodeDeck(deck))}`;
-    setShareUrl(url);
-    if (url.length > QR_MAX_URL_LENGTH) {
-      setQrError(
-        `共有URLが長すぎます（${url.length}文字）。URLコピーは可能ですが、QR表示には向きません。`,
-      );
-    } else {
-      setQrError("");
+    const { data, error } = await supabase
+      .from("decks")
+      .insert({ title, raw, memo, output })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error(error);
+      return;
     }
+
+    const id = data.id;
+
+    const url = `${process.env.NEXT_PUBLIC_BASE_URL}/deck/${id}`;
+
+    setShareUrl(url);
+    setQrError("");
     setShowQr(true);
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {}
+
+    await navigator.clipboard.writeText(url);
   };
 
   const downloadMd = () => {
@@ -1510,7 +1515,7 @@ export default function Home() {
     const id = data?.id;
 
     // ★ここ追加
-    const url = `${window.location.origin}/deck/${id}`;
+    const url = `${process.env.NEXT_PUBLIC_BASE_URL}/deck/${id}`;
     setShareUrl(url);
     setShowQr(true);
 

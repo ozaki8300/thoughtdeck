@@ -1,30 +1,47 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
-export default function DeckPage({ params }: any) {
+export default function DeckPage() {
+  const params = useParams();
+  const id = params?.id as string;
+
   const [deck, setDeck] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+
     const fetchDeck = async () => {
+      console.log("🟡 id:", id);
+
       const { data, error } = await supabase
         .from("decks")
         .select("*")
-        .eq("id", params.id)
-        .single();
+        .eq("id", id)
+        .maybeSingle();
 
       if (error) {
-        console.error(error);
+        console.error("❌ supabase error:", error);
+        setErrorMsg(error.message);
         return;
       }
 
+      if (!data) {
+        setErrorMsg("データが見つかりません");
+        return;
+      }
+
+      console.log("✅ data:", data);
       setDeck(data);
     };
 
     fetchDeck();
-  }, [params.id]);
+  }, [id]);
 
+  if (errorMsg) return <div>{errorMsg}</div>;
   if (!deck) return <div>読み込み中...</div>;
 
   return (
