@@ -2,9 +2,9 @@
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
 import { getTitle, isH1, isH2, isH3 } from "../lib/deckParser";
+import { createDeck, updateDeck } from "../lib/deckService";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
-import { supabase } from "../lib/supabase";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1465,28 +1465,20 @@ export default function Home() {
 
       // 初回だけINSERT
       if (!id) {
-        const { data, error } = await supabase
-          .from("decks")
-          .insert({ title, raw, memo, output })
-          .select("id")
-          .single();
-
-        if (error) {
+        try {
+          id = await createDeck({ title, raw, memo, output });
+        } catch (error) {
           console.error("INSERT ERROR:", error);
           return;
         }
 
-        id = data.id;
         setDeckId(id);
       } 
       // 2回目以降はUPDATE（←ここが追加）
       else {
-        const { error } = await supabase
-          .from("decks")
-          .update({ title, raw, memo, output })
-          .eq("id", id);
-
-        if (error) {
+        try {
+          await updateDeck(id, { title, raw, memo, output });
+        } catch (error) {
           console.error("UPDATE ERROR:", error);
           return;
         }
