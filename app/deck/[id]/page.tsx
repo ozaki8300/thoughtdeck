@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-
 import { supabase } from "../../../lib/supabase";
+import Home from "../../page"; // ← これ追加
 
 type DeckPageProps = {
   params: Promise<{ id: string }>;
@@ -42,20 +42,15 @@ export default async function DeckPage({ params }: DeckPageProps) {
   const memo = data.memo?.trim() || "（メモなし）";
 
   return (
-    <main className="min-h-screen bg-slate-950 px-5 py-8 text-slate-100">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-6 border-b border-slate-800 pb-5">
-          <p className="text-sm text-blue-300">ThoughtDeck</p>
-          <h1 className="mt-2 text-2xl font-bold leading-tight">{title}</h1>
-        </header>
-
-        <div className="grid gap-5">
-          <ReadOnlySection title="Input" value={raw} />
-          <ReadOnlySection title="投稿文" value={output} />
-          <ReadOnlySection title="メモ" value={memo} />
-        </div>
-      </div>
-    </main>
+    <Home
+      initialData={{
+        raw: data.raw ?? "",
+        memo: data.memo ?? "",
+        output: data.output ?? "",
+        title: data.title ?? "",
+      }}
+      readOnly={true}
+    />
   );
 }
 

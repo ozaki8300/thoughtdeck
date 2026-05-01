@@ -824,11 +824,12 @@ function buildObsidianMarkdown(
   return `${frontmatter}\n\n[${title}](${restoreUrl})\n\n${body}\n\n---\n\n作成元: ThoughtDeck\n保存日時: ${formatObsidianTimestamp()}\n[thought-deck](${THOUGHTDECK_HOME_URL})\n`;
 }
 
-export default function Home() {
+export default function Home(props: any) {
+  const { initialData, readOnly = false } = props || {};
   const router = useRouter();
-  const [raw, setRaw] = useState(blankRaw);
-  const [memo, setMemo] = useState("");
-  const [output, setOutput] = useState("");
+  const [raw, setRaw] = useState(initialData?.raw ?? blankRaw);
+  const [memo, setMemo] = useState(initialData?.memo ?? "");
+  const [output, setOutput] = useState(initialData?.output ?? "");
   const [addedCards, setAddedCards] = useState<AddedCard[]>([]);
   const [starred, setStarred] = useState<string[]>([]);
 
