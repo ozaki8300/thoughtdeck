@@ -830,6 +830,7 @@ export default function Home() {
   const [showQr, setShowQr] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [qrError, setQrError] = useState("");
+  const [deckId, setDeckId] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const [expandedEditor, setExpandedEditor] = useState<"input" | "memo" | "output" | null>(
@@ -1459,26 +1460,49 @@ export default function Home() {
   };
 
   const createShare = async () => {
-    const { data, error } = await supabase
-      .from("decks")
-      .insert({ title, raw, memo, output })
-      .select("id")
-      .single();
+    try {
+      let id = deckId;
 
-    if (error) {
-      console.error(error);
-      return;
+      // 初回だけINSERT
+      if (!id) {
+        const { data, error } = await supabase
+          .from("decks")
+          .insert({ title, raw, memo, output })
+          .select("id")
+          .single();
+
+        if (error) {
+          console.error("INSERT ERROR:", error);
+          return;
+        }
+
+        id = data.id;
+        setDeckId(id);
+      } 
+      // 2回目以降はUPDATE（←ここが追加）
+      else {
+        const { error } = await supabase
+          .from("decks")
+          .update({ title, raw, memo, output })
+          .eq("id", id);
+
+        if (error) {
+          console.error("UPDATE ERROR:", error);
+          return;
+        }
+      }
+
+      const url = `${window.location.origin}/deck/${id}`;
+
+      setShareUrl(url);
+      setQrError("");
+      setShowQr(true);
+
+      await navigator.clipboard.writeText(url);
+
+    } catch (e) {
+      console.error(e);
     }
-
-    const id = data.id;
-
-    const url = `${process.env.NEXT_PUBLIC_BASE_URL}/deck/${id}`;
-
-    setShareUrl(url);
-    setQrError("");
-    setShowQr(true);
-
-    await navigator.clipboard.writeText(url);
   };
 
   const downloadMd = () => {
@@ -1498,28 +1522,6 @@ export default function Home() {
     );
     setCopyStatus("MDコピー済");
     window.setTimeout(() => setCopyStatus(""), 1800);
-  };
-
-  const saveToSupabase = async () => {
-    const { data, error } = await supabase
-      .from("decks")
-      .insert({ title, raw, memo, output })
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    const id = data?.id;
-
-    // ★ここ追加
-    const url = `${process.env.NEXT_PUBLIC_BASE_URL}/deck/${id}`;
-    setShareUrl(url);
-    setShowQr(true);
-
-    console.log("共有URL:", url);
   };
 
   const saveToObsidian = async () => {
@@ -2291,7 +2293,6 @@ export default function Home() {
                     <button onClick={() => { setShowShortcutHelp(true); setOpenTopMenu(null); }} className={topButtonClass}>使い方</button>
                     <button onClick={() => { changePerspective(); setOpenTopMenu(null); }} className={topButtonClass}>視点: {perspective.label}</button>
                     <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>テンプレ</button>
-                    <button onClick={() => { saveToSupabase(); setOpenTopMenu(null); }} className={topButtonClass}>保存</button>
                   </div>
 
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
