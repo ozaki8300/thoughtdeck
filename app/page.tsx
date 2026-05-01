@@ -6,7 +6,7 @@ import { createDeck, updateDeck } from "../lib/deckService";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
 
-import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent } from "react";
+import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type ParsedCard = {
@@ -928,6 +928,9 @@ export default function Home() {
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfWorkMode, setPdfWorkMode] = useState<PdfWorkMode>("thought");
   const [draggingPdf, setDraggingPdf] = useState(false);
+  const cloudDirtyRef = useRef(false);
+  const cloudSaveInFlightRef = useRef(false);
+  const latestCloudDeckRef = useRef({ title: "", raw: "", memo: "", output: "" });
 
   const parsedDeck = useMemo(() => parseDeck(raw), [raw]);
   const { title, topSections, bottomSections } = parsedDeck;
@@ -1087,6 +1090,32 @@ export default function Home() {
     window.setTimeout(() => setShortcutHint(""), 1200);
   };
 
+  const markCloudDirty = () => {
+    if (!deckId) return;
+    cloudDirtyRef.current = true;
+  };
+
+  const resolveTextStateAction = (value: SetStateAction<string>, current: string) =>
+    typeof value === "function" ? value(current) : value;
+
+  const setRawWithCloudDirty = (value: SetStateAction<string>) => {
+    const next = resolveTextStateAction(value, raw);
+    if (next !== raw) markCloudDirty();
+    setRaw(next);
+  };
+
+  const setMemoWithCloudDirty = (value: SetStateAction<string>) => {
+    const next = resolveTextStateAction(value, memo);
+    if (next !== memo) markCloudDirty();
+    setMemo(next);
+  };
+
+  const setOutputWithCloudDirty = (value: SetStateAction<string>) => {
+    const next = resolveTextStateAction(value, output);
+    if (next !== output) markCloudDirty();
+    setOutput(next);
+  };
+
   const moveCardToArea = (cardId: string | null, nextArea: Area) => {
     if (!cardId) return;
 
@@ -1094,7 +1123,7 @@ export default function Home() {
     if (!target) return;
 
     if (target.source === "raw") {
-      setRaw((prev) => changeRawCardArea(prev, cardId, nextArea));
+      setRawWithCloudDirty((prev) => changeRawCardArea(prev, cardId, nextArea));
     } else {
       setAddedCards((prev) =>
         prev.map((card) =>
@@ -1248,6 +1277,86 @@ export default function Home() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [raw, memo, output, addedCards, starred]);
+
+  useEffect(() => {
+    latestCloudDeckRef.current = { title, raw, memo, output };
+  }, [title, raw, memo, output]);
+
+  useEffect(() => {
+    const sendCloudSave = (reason: "beforeunload" | "visibilitychange") => {
+      if (!deckId || !cloudDirtyRef.current) return;
+      if (reason === "visibilitychange" && cloudSaveInFlightRef.current) return;
+
+      const payload = JSON.stringify({
+        id: deckId,
+        ...latestCloudDeckRef.current,
+      });
+
+      if (navigator.sendBeacon) {
+        const queued = navigator.sendBeacon(
+          "/api/deck/save",
+          new Blob([payload], { type: "application/json" }),
+        );
+        if (queued) {
+          cloudDirtyRef.current = false;
+          return;
+        }
+      }
+
+      if (reason === "beforeunload") return;
+
+      cloudSaveInFlightRef.current = true;
+      fetch("/api/deck/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        keepalive: true,
+      })
+        .then(() => {
+          cloudDirtyRef.current = false;
+        })
+        .catch((error) => {
+          console.error(`${reason} save error:`, error);
+        })
+        .finally(() => {
+          cloudSaveInFlightRef.current = false;
+        });
+    };
+
+    const saveOnUnload = () => {
+      sendCloudSave("beforeunload");
+    };
+
+    const saveOnHidden = () => {
+      if (document.visibilityState === "hidden") {
+        sendCloudSave("visibilitychange");
+      }
+    };
+
+    window.addEventListener("beforeunload", saveOnUnload);
+    document.addEventListener("visibilitychange", saveOnHidden);
+    return () => {
+      window.removeEventListener("beforeunload", saveOnUnload);
+      document.removeEventListener("visibilitychange", saveOnHidden);
+    };
+  }, [deckId]);
+
+  useEffect(() => {
+    if (!deckId) return;
+
+    const timer = window.setTimeout(async () => {
+      if (!cloudDirtyRef.current) return;
+
+      try {
+        await updateDeck(deckId, latestCloudDeckRef.current);
+        cloudDirtyRef.current = false;
+      } catch (e) {
+        console.error("idle save error:", e);
+      }
+    }, 60000);
+
+    return () => window.clearTimeout(timer);
+  }, [title, raw, memo, output, deckId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1484,6 +1593,8 @@ export default function Home() {
         }
       }
 
+      cloudDirtyRef.current = false;
+
       const url = `${window.location.origin}/deck/${id}`;
 
       setShareUrl(url);
@@ -1533,18 +1644,24 @@ export default function Home() {
 
   const clearAll = () => {
     if (!confirm("全ての内容をまっさらにしますか？")) return;
+
     setRaw(blankRaw);
     setMemo("");
     setOutput("");
     setAddedCards([]);
     setStarred([]);
+
     setShareUrl("");
     setQrError("");
     setShowQr(false);
+
     setSelectedCardId(null);
     setFocusMode(false);
     setShowLeft(false);
     setShowRight(false);
+
+    setDeckId(null); // ← ★これが足りなかった
+
     localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -1574,7 +1691,7 @@ export default function Home() {
   };
 
   const insertTemplate = (kind: "top" | Area | "bottom") => {
-    setRaw((prev) => {
+    setRawWithCloudDirty((prev) => {
       if (kind === "top") return insertTopSectionTemplate(prev);
       if (kind === "bottom") return insertBottomSectionTemplate(prev);
       return insertCardTemplate(prev, kind);
@@ -1807,7 +1924,7 @@ export default function Home() {
         ? "メモ編集"
         : "投稿文作成";
     const value = isInput ? raw : isMemo ? memo : output;
-    const setValue = isInput ? setRaw : isMemo ? setMemo : setOutput;
+    const setValue = isInput ? setRawWithCloudDirty : isMemo ? setMemoWithCloudDirty : setOutputWithCloudDirty;
     const placeholder = isInput
       ? "Inputを集中して書きます..."
       : isMemo
@@ -2413,9 +2530,9 @@ export default function Home() {
           onPdfPageChange={setPdfPage}
           onPdfSideChange={setPdfSide}
           onPdfWorkModeChange={setPdfWorkMode}
-          onRawChange={setRaw}
-          onMemoChange={setMemo}
-          onOutputChange={setOutput}
+          onRawChange={setRawWithCloudDirty}
+          onMemoChange={setMemoWithCloudDirty}
+          onOutputChange={setOutputWithCloudDirty}
           onHidePdf={hidePdf}
           onOpenPdfPicker={openPdfPicker}
           onClearPdf={clearPdf}
@@ -2445,7 +2562,7 @@ export default function Home() {
 
                   <textarea
                     value={raw}
-                    onChange={(e) => setRaw(e.target.value)}
+                    onChange={(e) => setRawWithCloudDirty(e.target.value)}
                     placeholder="ここにInputを書きます..."
                     className="no-scrollbar h-[calc(100vh-205px)] w-full resize-none rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[42vh]"
                   />
