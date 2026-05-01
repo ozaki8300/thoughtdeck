@@ -1,21 +1,456 @@
+====================
+FILE: app/page.tsx
+====================
+
 "use client";
 
-import type { Area, ThemeMode } from "../lib/deckTypes";
+import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
+import { getTitle, isH1, isH2, isH3 } from "../lib/deckParser";
+import { createDeck, updateDeck } from "../lib/deckService";
+import { useCloudSave } from "../lib/useCloudSave";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
 import {
-  THOUGHTDECK_HOME_URL,
-  defaultQuickLinks,
-  getActiveAreaEntries,
-  getAreaPlaceholder,
-  getDynamicColumnClass,
-  nextThemeMode,
-  themeLabel,
-  useDeckState,
-} from "../lib/useDeckState";
-import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckState";
+  compressToEncodedURIComponent,
+  decompressFromEncodedURIComponent,
+} from "lz-string";
+import { useRouter } from "next/navigation";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+type ParsedCard = {
+  id: string;
+  area: Area;
+  title: string;
+  lines: string[];
+  source: "raw";
+  visualGroup: number;
+  rawH3Index: number;
+  areaBlockIndex: number;
+};
+
+type AddedCard = {
+  id: string;
+  area: Area;
+  title: string;
+  lines: string[];
+  source: "added";
+  visualGroup?: number;
+};
+
+type Card = ParsedCard | AddedCard;
+
+type OneColumnSection = {
+  id: string;
+  title: string;
+  lines: string[];
+  position: "top" | "bottom";
+  visualGroup: number;
+};
+
+type TextPanelFocusItem = {
+  id: "td-memo" | "td-output";
+  title: string;
+  lines: string[];
+  focusKind: "memo" | "output";
+  focusLabel: string;
+};
+
+type FocusItem =
+  | (Card & { focusKind: "card"; focusLabel: string })
+  | (OneColumnSection & { focusKind: "section"; focusLabel: string })
+  | TextPanelFocusItem;
+
+type DeckState = {
+  raw: string;
+  memo: string;
+  output: string;
+  addedCards: AddedCard[];
+  starred: string[];
+};
+
+type ParsedDeck = {
+  title: string;
+  topSections: OneColumnSection[];
+  cards: ParsedCard[];
+  bottomSections: OneColumnSection[];
+};
+
+const STORAGE_KEY = "thoughtdeck:data:v9";
+const LEGACY_STORAGE_KEYS = ["thoughtdeck:v8", "thoughtdeck:v7", "thoughtdeck:v6"];
+const RESOURCES_STORAGE_KEY = "thoughtdeck:resources:v1";
+const LEGACY_CUSTOM_LINKS_STORAGE_KEY = "thoughtdeck:custom-links:v1";
+const MAX_URL_LENGTH = 3000;
+const QR_MAX_URL_LENGTH = 2900;
+const THOUGHTDECK_HOME_URL = "https://thought-deck.vercel.app/";
+
+const defaultQuickLinks = [
+  { label: "ThoughtDeck", url: "https://thought-deck.vercel.app/" },
+  { label: "GLOBIS VC", url: "https://vc.globis.ac.jp/wam/auth/login" },
+] as const;
+
+type ResourceTemplate = { id: string; title: string; content: string };
+type ResourceState = { links: { label: string; url: string }[]; templates: ResourceTemplate[] };
+const THEME_STORAGE_KEY = "thoughtdeck:theme:v2";
+const PDF_VIEW_STORAGE_KEY = "thoughtdeck:pdf-view:v1";
+const PDF_MIN_WIDTH = 360;
+const PDF_DEFAULT_WIDTH = 760;
+const getPdfMaxWidth = () => {
+  if (typeof window === "undefined") return 1280;
+  return Math.max(980, Math.floor(window.innerWidth * 0.92));
+};
+const clampPdfWidth = (value: number) => Math.min(Math.max(value, PDF_MIN_WIDTH), getPdfMaxWidth());
+const themeLabel = (mode: ThemeMode) => mode === "auto" ? "自動" : mode === "light" ? "ライト" : "ダーク";
+const nextThemeMode = (mode: ThemeMode): ThemeMode => mode === "auto" ? "light" : mode === "light" ? "dark" : "auto";
+
+const placeholderSets = [
+  {
+    label: "発散",
+    left: "何が起きている？",
+    center: "どう考える？",
+    right: "何が論点？",
+  },
+  {
+    label: "再構造化",
+    left: "どう見える？",
+    center: "なぜそう思う？",
+    right: "どこで使える？",
+  },
+  {
+    label: "自由",
+    left: "",
+    center: "",
+    right: "",
+  },
+] as const;
+
+const blankRaw = `# タイトル
+
+## 設問
+- 
+
+### 見出し
+@area: left
+-
+
+## まとめ
+- `;
+
+const demoRaw = `# ファイナンス Day2 事業戦略と企業財務
+
+## issue
+NPVがマイナスでも投資する意思決定とは何か
+
+### 業界の前提
+@area: left
+- 2012年当時の液晶業界は「大型化・設備投資・シェア獲得」で勝つという発想が主流
+- 多くの企業は「良い工場を持てば勝てる」と考えていた
+
+### 見方の違い
+@area: center
+- 同じ投資でも、単体の採算だけでなく、支配構造や将来の交渉力で意味が変わる
+- 郭台銘氏は工場単体ではなく、サプライチェーン全体の中での価値を見ていた
+
+### 判断軸
+@area: right
+- NPVだけでなく、不確実性・オプション価値・サプライチェーン支配を見る
+- 数値ではなく、どの前提に賭けるかが重要になる
+
+## まとめ
+投資判断は、数値だけでなく、どの前提に賭けるのか、どの構造を取りにいくのかを含む意思決定である。`;
+
+const demoOutput = `Day2では、NPVやIRRといった定量指標の重要性を再認識するとともに、それだけでは意思決定を説明できないケースについて深く考えさせられた。
+
+特に印象的だったのは、シャープの投資判断である。NPVがマイナスであっても実行された背景には、「生存のための投資」という側面があり、単なる財務合理性では説明できない意思決定であった。
+
+一方で、郭台銘氏の視点は、工場単体ではなくサプライチェーン全体の中で価値を捉えるものであり、同じ資産でも組み合わせによって価値が変わることを示していた。
+
+本ケースを通じて、投資判断とは数値評価だけでなく、どの前提に賭けるのか、どの構造を取りにいくのかを含めた意思決定であると学んだ。`;
+
+function encodeDeck(deck: DeckState) {
+  return compressToEncodedURIComponent(JSON.stringify(deck));
+}
+
+function decodeDeck(value: string): DeckState | null {
+  try {
+    const json = decompressFromEncodedURIComponent(value);
+    return JSON.parse(json || "{}");
+  } catch {
+    return null;
+  }
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function getTimestampSlug(date = new Date()) {
+  const yyyy = date.getFullYear();
+  const mm = pad2(date.getMonth() + 1);
+  const dd = pad2(date.getDate());
+  const hh = pad2(date.getHours());
+  const mi = pad2(date.getMinutes());
+  const ss = pad2(date.getSeconds());
+  return `${yyyy}-${mm}-${dd}_${hh}-${mi}-${ss}`;
+}
+
+function sanitizeFileName(value: string) {
+  return value
+    .replace(/[\/:*?"<>|#^[\]]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getObsidianTitle(title: string, timestamp: string) {
+  const safeTitle = sanitizeFileName(title);
+  if (!safeTitle || safeTitle === "タイトル" || safeTitle === "タイトル未設定")
+    return timestamp;
+  return `${timestamp}_${safeTitle}`;
+}
+
+function normalizeDisplayLines(lines: string[]) {
+  return lines.map((line) => line.trim()).filter(Boolean);
+}
+
+function areaFromLine(line?: string): Area {
+  const rawArea = line?.replace(/^@area:/, "").trim();
+  return rawArea === "left" || rawArea === "center" || rawArea === "right"
+    ? rawArea
+    : "center";
+}
+
+function parseDeck(raw: string): ParsedDeck {
+  const lines = raw.split("\n");
+  const title = getTitle(raw);
+  const topSections: OneColumnSection[] = [];
+  const bottomSections: OneColumnSection[] = [];
+  const cards: ParsedCard[] = [];
+
+  let currentSection: OneColumnSection | null = null;
+  let currentCard: ParsedCard | null = null;
+  let hasSeenCard = false;
+  let visualGroup = 0;
+  let h3Index = -1;
+  let areaBlockIndex = 0;
+  let currentCardTitle = "見出し";
+
+  const flushSection = () => {
+    if (!currentSection) return;
+    currentSection.lines = normalizeDisplayLines(currentSection.lines);
+    if (currentSection.position === "top") topSections.push(currentSection);
+    else bottomSections.push(currentSection);
+    currentSection = null;
+  };
+
+  const flushCard = () => {
+    if (!currentCard) return;
+    currentCard.lines = normalizeDisplayLines(currentCard.lines).filter(
+      (line) => !line.startsWith("@area:"),
+    );
+    cards.push(currentCard);
+    currentCard = null;
+  };
+
+  const hasCardBody = (card: ParsedCard | null) =>
+    Boolean(card && card.lines.some((line) => line.trim().length > 0));
+
+  const createRawCard = (area: Area = "center"): ParsedCard => ({
+    id: `raw-${h3Index}-${areaBlockIndex}-${currentCardTitle}`,
+    source: "raw",
+    area,
+    title: currentCardTitle,
+    lines: [],
+    visualGroup,
+    rawH3Index: h3Index,
+    areaBlockIndex,
+  });
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed === "---") {
+      flushCard();
+      flushSection();
+      visualGroup += 1;
+      continue;
+    }
+
+    if (isH1(line)) {
+      flushCard();
+      flushSection();
+      continue;
+    }
+
+    if (isH2(line)) {
+      flushCard();
+      flushSection();
+      const position: "top" | "bottom" = hasSeenCard ? "bottom" : "top";
+      currentSection = {
+        id: `${position}-${position === "top" ? topSections.length : bottomSections.length}-${trimmed}`,
+        title: trimmed.replace(/^##[ \t\u3000]*/, "").trim() || "セクション",
+        lines: [],
+        position,
+        visualGroup,
+      };
+      continue;
+    }
+
+    if (isH3(line)) {
+      flushSection();
+      flushCard();
+      hasSeenCard = true;
+      h3Index += 1;
+      areaBlockIndex = 0;
+      currentCardTitle = trimmed.replace(/^###[ \t\u3000]*/, "").trim() || "見出し";
+      currentCard = createRawCard("center");
+      continue;
+    }
+
+    if (currentCard) {
+      if (trimmed.startsWith("@area:")) {
+        const nextArea = areaFromLine(trimmed);
+
+        // 1つの「### 見出し」の中に @area が複数ある場合は、
+        // @area ごとにカードを分割する。
+        // これにより、見出しは同じまま left / center / right に自然に展開できる。
+        if (hasCardBody(currentCard)) {
+          flushCard();
+          areaBlockIndex += 1;
+          currentCard = createRawCard(nextArea);
+        } else {
+          currentCard.area = nextArea;
+        }
+        continue;
+      }
+
+      currentCard.lines.push(line);
+      continue;
+    }
+
+    if (currentSection) {
+      currentSection.lines.push(line);
+    }
+  }
+
+  flushCard();
+  flushSection();
+
+  return { title, topSections, cards, bottomSections };
+}
+
+function firstH3Index(raw: string) {
+  return raw.search(/^###[ \t\u3000]+/m);
+}
+
+function firstBottomSectionIndex(raw: string) {
+  const h3Index = firstH3Index(raw);
+  if (h3Index < 0) return -1;
+  const rest = raw.slice(h3Index);
+  const match = rest.match(/^##[ \t\u3000]+/m);
+  return match?.index === undefined ? -1 : h3Index + match.index;
+}
+
+function insertBlock(raw: string, index: number, template: string) {
+  if (index >= 0) {
+    return `${raw.slice(0, index).trimEnd()}\n\n${template}\n\n${raw.slice(index).trimStart()}`;
+  }
+  return `${raw.trimEnd()}\n\n${template}`;
+}
+
+function insertTopSectionTemplate(raw: string) {
+  const h3Index = firstH3Index(raw);
+  const template = `## 設問\n- `;
+  return insertBlock(raw, h3Index, template);
+}
+
+function insertCardTemplate(raw: string, area: Area) {
+  const bottomIndex = firstBottomSectionIndex(raw);
+  const template = `### 見出し\n@area: ${area}\n- `;
+  return insertBlock(raw, bottomIndex, template);
+}
+
+function insertBottomSectionTemplate(raw: string) {
+  return `${raw.trimEnd()}\n\n## まとめ\n- `;
+}
+
+function rawCardLocatorFromId(id: string) {
+  const match = id.match(/^raw-(\d+)-(\d+)-/);
+  if (!match) return null;
+  return {
+    h3Index: Number(match[1]),
+    areaBlockIndex: Number(match[2]),
+  };
+}
+
+function changeRawCardArea(raw: string, cardId: string, nextArea: Area) {
+  const locator = rawCardLocatorFromId(cardId);
+  if (!locator) return raw;
+
+  const lines = raw.split("\n");
+  let currentH3Index = -1;
+  let h3LineIndex = -1;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (isH3(lines[i])) {
+      currentH3Index += 1;
+      if (currentH3Index === locator.h3Index) {
+        h3LineIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (h3LineIndex < 0) return raw;
+
+  let blockEnd = lines.length;
+  for (let i = h3LineIndex + 1; i < lines.length; i += 1) {
+    if (isH1(lines[i]) || isH2(lines[i]) || isH3(lines[i]) || lines[i].trim() === "---") {
+      blockEnd = i;
+      break;
+    }
+  }
+
+  const areaLineIndexes: number[] = [];
+  for (let i = h3LineIndex + 1; i < blockEnd; i += 1) {
+    if (lines[i].trim().startsWith("@area:")) areaLineIndexes.push(i);
+  }
+
+  const targetAreaLineIndex = areaLineIndexes[locator.areaBlockIndex];
+
+  if (targetAreaLineIndex !== undefined) {
+    lines[targetAreaLineIndex] = `@area: ${nextArea}`;
+  } else {
+    lines.splice(h3LineIndex + 1, 0, `@area: ${nextArea}`);
+  }
+
+  return lines.join("\n");
+}
+
+function normalizeConclusionLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("-") ? `  ${trimmed}` : `  - ${trimmed}`;
+}
+
+function appendCardToConclusion(raw: string, card: Card) {
+  const cardLines = [
+    `- ${card.title || "選択カード"}`,
+    ...card.lines.map(normalizeConclusionLine).filter(Boolean),
+  ].join("\n");
+
+  const summaryMatch = raw.match(/^##[ \t\u3000]+まとめ\s*$/m);
+
+  if (!summaryMatch || summaryMatch.index === undefined) {
+    return `${raw.trimEnd()}\n\n## まとめ\n${cardLines}\n`;
+  }
+
+  const insertAt = summaryMatch.index + summaryMatch[0].length;
+  const before = raw.slice(0, insertAt);
+  const after = raw.slice(insertAt);
+  const needsNewLine = after.startsWith("\n") ? "" : "\n";
+  return `${before}${needsNewLine}\n${cardLines}${after}`;
+}
 
 function renderInline(text: string) {
   const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
@@ -174,117 +609,1044 @@ function renderMarkdownBlocks(text: string, emptyText = "本文はInput欄に入
   return <div className="space-y-1 break-words">{elements}</div>;
 }
 
-export default function Home(props: UseDeckStateProps) {
-  const {
-    raw,
-    memo,
-    output,
-    starred,
-    saveStatus,
-    copyStatus,
-    setCopyStatus,
-    obsidianToast,
-    showQr,
-    setShowQr,
-    shareUrl,
-    longUrl,
-    qrError,
+type ThoughtDeckIdKind = "note" | "group" | "card" | "memo";
+
+const ID_PREFIX_BY_KIND: Record<ThoughtDeckIdKind, string> = {
+  note: "td_n",
+  group: "td_g",
+  card: "td_c",
+  memo: "td_m",
+};
+
+function normalizeUuid(rawId: string) {
+  return rawId.replace(/-/g, "");
+}
+
+function generatePortableId(kind: ThoughtDeckIdKind) {
+  const prefix = ID_PREFIX_BY_KIND[kind];
+
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}_${normalizeUuid(crypto.randomUUID())}`;
+  }
+
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+type ObsidianExportIds = {
+  noteId: string;
+  groupId: string;
+};
+
+function buildObsidianMetaLines(
+  ids: ObsidianExportIds,
+  item: { type: "question" | "card" | "summary"; area?: Area },
+) {
+  const areaLine = item.area ? `<!-- @area: ${item.area} -->\n` : "";
+
+  return `<!-- @card_id: ${generatePortableId("card")} -->\n<!-- @note_id: ${ids.noteId} -->\n<!-- @group_id: ${ids.groupId} -->\n<!-- @type: ${item.type} -->\n${areaLine}`;
+}
+
+function injectPortableIdsForObsidian(markdown: string, ids: ObsidianExportIds) {
+  const lines = markdown.split("\n");
+  const result: string[] = [];
+  let pendingCardHeading = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (/^##\s*設問/.test(trimmed)) {
+      result.push(line);
+      result.push(buildObsidianMetaLines(ids, { type: "question" }).trimEnd());
+      continue;
+    }
+
+    if (/^##\s*まとめ/.test(trimmed)) {
+      result.push(line);
+      result.push(buildObsidianMetaLines(ids, { type: "summary" }).trimEnd());
+      continue;
+    }
+
+    if (/^###\s+/.test(trimmed)) {
+      pendingCardHeading = true;
+      result.push(line);
+      continue;
+    }
+
+    const areaMatch = trimmed.match(/^@area:\s*(left|center|right)\s*$/);
+    if (areaMatch && pendingCardHeading) {
+      result.push(
+        buildObsidianMetaLines(ids, {
+          type: "card",
+          area: areaMatch[1] as Area,
+        }).trimEnd(),
+      );
+      pendingCardHeading = false;
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  return result.join("\n");
+}
+
+function addedCardToMarkdown(
+  card: AddedCard,
+  options?: { ids?: ObsidianExportIds; withPortableIds?: boolean },
+) {
+  const metaLines =
+    options?.withPortableIds && options.ids
+      ? buildObsidianMetaLines(options.ids, { type: "card", area: card.area })
+      : `@area: ${card.area}\n`;
+
+  return `### ${card.title || "見出し"}\n${metaLines}${card.lines.length ? card.lines.join("\n") : "- "}`;
+}
+
+function buildExportMarkdown(
+  raw: string,
+  addedCards: AddedCard[],
+  memo: string,
+  output = "",
+  includeFooter = true,
+  withPortableIds = false,
+  ids?: ObsidianExportIds,
+) {
+  const activeIds =
+    ids ??
+    (withPortableIds
+      ? {
+          noteId: generatePortableId("note"),
+          groupId: generatePortableId("group"),
+        }
+      : undefined);
+
+  const noteMeta =
+    withPortableIds && activeIds
+      ? `<!-- @note_id: ${activeIds.noteId} -->\n<!-- @group_id: ${activeIds.groupId} -->\n<!-- #${activeIds.groupId} -->\n\n`
+      : "";
+
+  const added =
+    addedCards.length > 0
+      ? [
+          "",
+          "---",
+          "",
+          "## 授業中に追加したカード",
+          "",
+          ...addedCards.map((card) =>
+            addedCardToMarkdown(card, {
+              ids: activeIds,
+              withPortableIds,
+            }),
+          ),
+        ].join("\n")
+      : "";
+
+  const footer = includeFooter
+    ? `\n\n---\n\n作成元: ThoughtDeck\n保存日時: ${new Date().toLocaleString("ja-JP")}\n`
+    : "";
+
+  const sourceMarkdown =
+    withPortableIds && activeIds
+      ? injectPortableIdsForObsidian(raw.trimEnd(), activeIds)
+      : raw.trimEnd();
+
+  const memoMeta =
+    withPortableIds && activeIds
+      ? `<!-- @memo_id: ${generatePortableId("memo")} -->\n<!-- @note_id: ${activeIds.noteId} -->\n<!-- @group_id: ${activeIds.groupId} -->\n<!-- @type: memo -->\n\n`
+      : "";
+
+  const outputSection = output.trim()
+    ? `\n\n---\n\n## 投稿文\n${output.trim()}`
+    : "";
+
+  return `${noteMeta}${sourceMarkdown}${added}\n\n---\n\n## メモ\n${memoMeta}${memo.trim() || "（メモなし）"}${outputSection}${footer}`;
+}
+
+function buildRestoreUrl(
+  raw: string,
+  memo: string,
+  output: string,
+  addedCards: AddedCard[],
+  starred: string[],
+) {
+  if (typeof window === "undefined") return "";
+  const base = `${window.location.origin}${window.location.pathname}`;
+  const deck: DeckState = { raw, memo, output, addedCards, starred };
+  return `${base}?d=${encodeDeck(deck)}`;
+}
+
+function getActiveAreaEntries(block: { left: Card[]; center: Card[]; right: Card[] }) {
+  return ([
+    ["left", block.left],
+    ["center", block.center],
+    ["right", block.right],
+  ] as const).filter(([, items]) => items.length > 0);
+}
+
+function getDynamicColumnClass(count: number) {
+  if (count <= 1) return "grid-cols-1";
+  if (count === 2) return "grid-cols-2";
+  return "grid-cols-3";
+}
+
+function getAreaPlaceholder(perspective: (typeof placeholderSets)[number], area: Area) {
+  if (area === "left") return perspective.left;
+  if (area === "center") return perspective.center;
+  return perspective.right;
+}
+
+function formatObsidianTimestamp(date = new Date()) {
+  return date.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function buildObsidianMarkdown(
+  raw: string,
+  addedCards: AddedCard[],
+  memo: string,
+  output: string,
+  starred: string[],
+) {
+  const restoreUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
+  const title = getTitle(raw);
+  const ids: ObsidianExportIds = {
+    noteId: generatePortableId("note"),
+    groupId: generatePortableId("group"),
+  };
+  const body = buildExportMarkdown(raw, addedCards, memo, output, false, true, ids).trimEnd();
+
+  const frontmatter = `---\nthoughtdeck_note_id: ${ids.noteId}\nthoughtdeck_group_id: ${ids.groupId}\ntags:\n  - thoughtdeck\n  - ${ids.groupId}\n---`;
+
+  return `${frontmatter}\n\n[${title}](${restoreUrl})\n\n${body}\n\n---\n\n作成元: ThoughtDeck\n保存日時: ${formatObsidianTimestamp()}\n[thought-deck](${THOUGHTDECK_HOME_URL})\n`;
+}
+
+export default function Home(props: any) {
+  const { initialData, readOnly = false } = props || {};
+  const router = useRouter();
+  const [raw, setRaw] = useState(initialData?.raw ?? blankRaw);
+  const [memo, setMemo] = useState(initialData?.memo ?? "");
+  const [output, setOutput] = useState(initialData?.output ?? "");
+  const [addedCards, setAddedCards] = useState<AddedCard[]>([]);
+  const [starred, setStarred] = useState<string[]>([]);
+
+  const [saveStatus, setSaveStatus] = useState("保存済");
+  const [copyStatus, setCopyStatus] = useState("");
+  const [obsidianToast, setObsidianToast] = useState("");
+  const [showQr, setShowQr] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [longUrl, setLongUrl] = useState("");
+  const [qrError, setQrError] = useState("");
+  const [deckId, setDeckId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
+  const [expandedEditor, setExpandedEditor] = useState<"input" | "memo" | "output" | null>(
+    null,
+  );
+  const [shortcutHint, setShortcutHint] = useState("");
+  const [perspectiveIndex, setPerspectiveIndex] = useState(1);
+
+  const perspective = placeholderSets[perspectiveIndex];
+
+  const openOutputComposer = () => {
+    setSelectedCardId("td-output");
+    setFocusMode(false);
+
+    // PDFワークスペースへ切り替えるのは、PCでPDFが実際に表示中のときだけ。
+    // pdfUrl が残っているだけの状態やスマホでは、投稿エディタを通常モーダルで開く。
+    if (pdfUrl && isPdfOpen && !isMobileLike()) {
+      setPdfWorkMode("output");
+      setExpandedEditor(null);
+      return;
+    }
+
+    setExpandedEditor("output");
+  };
+
+  const openMemoEditor = () => {
+    setSelectedCardId("td-memo");
+    setFocusMode(false);
+
+    // PDFワークスペースへ切り替えるのは、PCでPDFが実際に表示中のときだけ。
+    if (pdfUrl && isPdfOpen && !isMobileLike()) {
+      setPdfWorkMode("memo");
+      setExpandedEditor(null);
+      return;
+    }
+
+    setExpandedEditor("memo");
+  };
+
+  const baseCardClass =
+    "border-[var(--td-card-border)] bg-[var(--td-card-bg)] text-[var(--td-text)] hover:border-[var(--td-card-border-hover)] hover:bg-[var(--td-hover)]";
+
+  const selectedThoughtClass =
+    "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] shadow-[inset_3px_0_0_var(--td-accent-shadow)]";
+
+  const mutedQuestionClass = "text-[10.5pt] leading-none text-[var(--td-muted)]";
+
+  const changePerspective = () => {
+    setPerspectiveIndex((prev) => (prev + 1) % placeholderSets.length);
+  };
+
+  const openInputEditor = () => {
+    // PDFワークスペースへ切り替えるのは、PCでPDFが実際に表示中のときだけ。
+    if (pdfUrl && isPdfOpen && !isMobileLike()) {
+      setPdfWorkMode("input");
+      setSelectedCardId(null);
+      setFocusMode(false);
+      setExpandedEditor(null);
+      return;
+    }
+
+    setExpandedEditor("input");
+  };
+
+  const [showLeft, setShowLeft] = useState(false);
+  const [showRight, setShowRight] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [openTopMenu, setOpenTopMenu] = useState<"more" | "display" | "export" | "resources" | "theme" | null>(null);
+  const topMenuRef = useRef<HTMLDivElement | null>(null);
+  const memoRef = useRef<HTMLElement | null>(null);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [customLinks, setCustomLinks] = useState<{ label: string; url: string }[]>([]);
+  const [customLinkLabel, setCustomLinkLabel] = useState("");
+  const [customLinkUrl, setCustomLinkUrl] = useState("");
+  const [templates, setTemplates] = useState<ResourceTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("free");
+  const [templateInstruction, setTemplateInstruction] = useState("");
+  const [templateIncludeInput, setTemplateIncludeInput] = useState(true);
+  const [templateIncludeMemo, setTemplateIncludeMemo] = useState(false);
+  const [templateIncludeOutput, setTemplateIncludeOutput] = useState(false);
+  const [newTemplateTitle, setNewTemplateTitle] = useState("");
+  const [newTemplateContent, setNewTemplateContent] = useState("");
+  const [leftWidth, setLeftWidth] = useState(350);
+  const [rightWidth, setRightWidth] = useState(390);
+  const [draggingLeft, setDraggingLeft] = useState(false);
+  const [draggingRight, setDraggingRight] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [pdfFileName, setPdfFileName] = useState("");
+  const [isPdfOpen, setIsPdfOpen] = useState(false);
+  const [pdfSide, setPdfSide] = useState<PdfSide>("left");
+  const [pdfWidth, setPdfWidth] = useState(PDF_DEFAULT_WIDTH);
+  const [pdfPage, setPdfPage] = useState(1);
+  const [pdfWorkMode, setPdfWorkMode] = useState<PdfWorkMode>("thought");
+  const [draggingPdf, setDraggingPdf] = useState(false);
+
+  const parsedDeck = useMemo(() => parseDeck(raw), [raw]);
+  const { title, topSections, bottomSections } = parsedDeck;
+  const getLatestCloudDeck = useCallback(
+    () => ({ title, raw, memo, output }),
+    [title, raw, memo, output],
+  );
+  const { markDirty } = useCloudSave({
+    deckId,
+    getLatest: getLatestCloudDeck,
+  });
+  const parsedCards = parsedDeck.cards;
+  const allCards = useMemo<Card[]>(
+    () => [...parsedCards, ...addedCards],
+    [parsedCards, addedCards],
+  );
+  const focusItems = useMemo<FocusItem[]>(() => {
+    const cardLabel = (area: Area) =>
+      area === "left" ? "事実" : area === "center" ? "解釈" : "論点";
+
+    return [
+      ...topSections.map((section) => ({
+        ...section,
+        focusKind: "section" as const,
+        focusLabel: "設問",
+      })),
+      ...allCards.map((card) => ({
+        ...card,
+        focusKind: "card" as const,
+        focusLabel: cardLabel(card.area),
+      })),
+      ...bottomSections.map((section) => ({
+        ...section,
+        focusKind: "section" as const,
+        focusLabel: "結論",
+      })),
+    ];
+  }, [topSections, allCards, bottomSections]);
+
+  const allQuickLinks = useMemo(
+    () => [...defaultQuickLinks, ...customLinks],
+    [customLinks],
+  );
+
+  const addCustomLink = () => {
+    const label = customLinkLabel.trim();
+    let url = customLinkUrl.trim();
+    if (!label || !url) return;
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    setCustomLinks((prev) => [...prev, { label, url }]);
+    setCustomLinkLabel("");
+    setCustomLinkUrl("");
+    showShortcutHint("追加リンクしました");
+  };
+
+  const removeCustomLink = (index: number) => {
+    setCustomLinks((prev) => prev.filter((_, i) => i !== index));
+  };
+
+
+  const copyTextSafely = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+  };
+
+  const isMobileLike = () => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768 || window.matchMedia?.("(pointer: coarse)").matches;
+  };
+
+  const toggleMemoAndScroll = () => {
+    const isMobile = isMobileLike();
+
+    if (showRight) {
+      setShowRight(false);
+      if (selectedCardId === "td-memo") setSelectedCardId(null);
+      return;
+    }
+
+    setShowRight(true);
+    setSelectedCardId("td-memo");
+    setFocusMode(false);
+
+    if (!isMobile) return;
+
+    window.setTimeout(() => {
+      memoRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
+
+  const handleResourceLinkClick = async (event: ReactMouseEvent<HTMLAnchorElement>, url: string) => {
+    event.stopPropagation();
+
+    if (isMobileLike()) {
+      event.preventDefault();
+      await copyTextSafely(url);
+      showShortcutHint("URLをコピーしました");
+      window.setTimeout(() => setOpenTopMenu(null), 250);
+      return;
+    }
+
+    window.setTimeout(() => setOpenTopMenu(null), 300);
+  };
+
+  const addTemplate = () => {
+    const title = newTemplateTitle.trim();
+    const content = newTemplateContent.trim();
+    if (!title || !content) return;
+    const id = `tpl-${Date.now()}`;
+    setTemplates((prev) => [...prev, { id, title, content }]);
+    setSelectedTemplateId(id);
+    setNewTemplateTitle("");
+    setNewTemplateContent("");
+    showShortcutHint("テンプレを追加しました");
+  };
+
+  const removeTemplate = (id: string) => {
+    setTemplates((prev) => prev.filter((template) => template.id !== id));
+    if (selectedTemplateId === id) setSelectedTemplateId("free");
+  };
+
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || null;
+
+  const cardBlocks = useMemo(() => {
+    const blockMap = new Map<number, Card[]>();
+
+    allCards.forEach((card) => {
+      const blockKey = card.visualGroup ?? 0;
+      const existing = blockMap.get(blockKey) ?? [];
+      existing.push(card);
+      blockMap.set(blockKey, existing);
+    });
+
+    return Array.from(blockMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([visualGroup, cards]) => ({
+        visualGroup,
+        left: cards.filter((card) => card.area === "left"),
+        center: cards.filter((card) => card.area === "center"),
+        right: cards.filter((card) => card.area === "right"),
+      }));
+  }, [allCards]);
+  const selectedCard =
+    allCards.find((card) => card.id === selectedCardId) || null;
+  const selectedFocusItem =
+    focusItems.find((item) => item.id === selectedCardId) || null;
+
+  const showShortcutHint = (message: string) => {
+    setShortcutHint(message);
+    window.setTimeout(() => setShortcutHint(""), 1200);
+  };
+
+  const markCloudDirty = () => {
+    markDirty();
+  };
+
+  const resolveTextStateAction = (value: SetStateAction<string>, current: string) =>
+    typeof value === "function" ? value(current) : value;
+
+  const setRawWithCloudDirty = (value: SetStateAction<string>) => {
+    const next = resolveTextStateAction(value, raw);
+    if (next !== raw) markCloudDirty();
+    setRaw(next);
+  };
+
+  const setMemoWithCloudDirty = (value: SetStateAction<string>) => {
+    const next = resolveTextStateAction(value, memo);
+    if (next !== memo) markCloudDirty();
+    setMemo(next);
+  };
+
+  const setOutputWithCloudDirty = (value: SetStateAction<string>) => {
+    const next = resolveTextStateAction(value, output);
+    if (next !== output) markCloudDirty();
+    setOutput(next);
+  };
+
+  const moveCardToArea = (cardId: string | null, nextArea: Area) => {
+    if (!cardId) return;
+
+    const target = allCards.find((card) => card.id === cardId);
+    if (!target) return;
+
+    if (target.source === "raw") {
+      setRawWithCloudDirty((prev) => changeRawCardArea(prev, cardId, nextArea));
+    } else {
+      setAddedCards((prev) =>
+        prev.map((card) =>
+          card.id === cardId ? { ...card, area: nextArea } : card,
+        ),
+      );
+    }
+
+    setSelectedCardId(cardId);
+    showShortcutHint(`${target.title} → ${nextArea}`);
+  };
+
+  const selectSiblingCard = (direction: 1 | -1) => {
+    if (allCards.length === 0) return;
+
+    const currentIndex = selectedCardId
+      ? allCards.findIndex((card) => card.id === selectedCardId)
+      : -1;
+    const nextIndex =
+      currentIndex < 0
+        ? 0
+        : (currentIndex + direction + allCards.length) % allCards.length;
+
+    setSelectedCardId(allCards[nextIndex].id);
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get("d");
+
+    if (d) {
+      const decoded = decodeDeck(d);
+      if (decoded) {
+        setRaw(decoded.raw || blankRaw);
+        setMemo(decoded.memo || "");
+        setOutput(decoded.output || "");
+        setAddedCards(decoded.addedCards || []);
+        setStarred(decoded.starred || []);
+        setShowLeft(false);
+        setShowRight(false);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(decoded));
+        window.history.replaceState({}, "", window.location.pathname);
+        return;
+      }
+    }
+
+    const saved = localStorage.getItem(STORAGE_KEY) || LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
+    if (saved) {
+      try {
+        const deck = JSON.parse(saved) as DeckState;
+        setRaw(deck.raw || blankRaw);
+        setMemo(deck.memo || "");
+        setOutput(deck.output || "");
+        setAddedCards(deck.addedCards || []);
+        setStarred(deck.starred || []);
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedResources = localStorage.getItem(RESOURCES_STORAGE_KEY);
+      if (savedResources) {
+        const resources = JSON.parse(savedResources) as ResourceState;
+        setCustomLinks(resources.links || []);
+        setTemplates(resources.templates || []);
+        return;
+      }
+
+      const legacyLinks = localStorage.getItem(LEGACY_CUSTOM_LINKS_STORAGE_KEY);
+      if (legacyLinks) setCustomLinks(JSON.parse(legacyLinks));
+    } catch {
+      localStorage.removeItem(RESOURCES_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+      if (savedTheme === "auto" || savedTheme === "light" || savedTheme === "dark") {
+        setThemeMode(savedTheme);
+      }
+    } catch {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedPdfView = localStorage.getItem(PDF_VIEW_STORAGE_KEY);
+      if (!savedPdfView) return;
+      const config = JSON.parse(savedPdfView) as Partial<{ side: PdfSide; width: number; page: number; workMode: PdfWorkMode; isOpen: boolean }>;
+      if (config.side === "left" || config.side === "right") setPdfSide(config.side);
+      if (typeof config.width === "number") setPdfWidth(clampPdfWidth(config.width));
+      if (typeof config.page === "number") setPdfPage(Math.max(1, Math.floor(config.page)));
+      if (config.workMode === "thought" || config.workMode === "input" || config.workMode === "memo" || config.workMode === "output") setPdfWorkMode(config.workMode);
+      if (typeof config.isOpen === "boolean") setIsPdfOpen(config.isOpen);
+    } catch {
+      localStorage.removeItem(PDF_VIEW_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      PDF_VIEW_STORAGE_KEY,
+      JSON.stringify({ side: pdfSide, width: pdfWidth, page: pdfPage, workMode: pdfWorkMode, isOpen: isPdfOpen }),
+    );
+  }, [pdfSide, pdfWidth, pdfPage, pdfWorkMode, isPdfOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      RESOURCES_STORAGE_KEY,
+      JSON.stringify({ links: customLinks, templates }),
+    );
+  }, [customLinks, templates]);
+
+  useEffect(() => {
+    const onMouseDown = (event: globalThis.MouseEvent) => {
+      if (!openTopMenu) return;
+      const target = event.target as Node;
+      if (target instanceof Element && target.closest("[data-td-menu-root]")) return;
+      if (topMenuRef.current && !topMenuRef.current.contains(target)) {
+        setOpenTopMenu(null);
+      }
+    };
+
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [openTopMenu]);
+
+  useEffect(() => {
+    setSaveStatus("保存中");
+    const timer = window.setTimeout(() => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ raw, memo, output, addedCards, starred }),
+      );
+      setSaveStatus("保存済");
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [raw, memo, output, addedCards, starred]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isTyping =
+        tagName === "textarea" ||
+        tagName === "input" ||
+        tagName === "select" ||
+        target?.isContentEditable;
+
+      if (isTyping || event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key.toLowerCase() === "d") {
+        if (isMobileLike()) return;
+        event.preventDefault();
+        if (event.shiftKey) {
+          clearPdf();
+        } else {
+          togglePdf();
+        }
+        return;
+      }
+
+      if (event.key === "1") {
+        event.preventDefault();
+        moveCardToArea(selectedCardId, "left");
+      }
+
+      if (event.key === "2") {
+        event.preventDefault();
+        moveCardToArea(selectedCardId, "center");
+      }
+
+      if (event.key === "3") {
+        event.preventDefault();
+        moveCardToArea(selectedCardId, "right");
+      }
+
+      if (event.key.toLowerCase() === "s" && selectedCard) {
+        event.preventDefault();
+        toggleStar(selectedCard.id);
+        showShortcutHint("★ 重要マークを切り替えました");
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+        event.preventDefault();
+        selectSiblingCard(1);
+      }
+
+      if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        selectSiblingCard(-1);
+      }
+
+      if (event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        openInputEditor();
+        showShortcutHint("Inputを編集します");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        openMemoEditor();
+        showShortcutHint("メモを編集します");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        openOutputComposer();
+        showShortcutHint("投稿文を編集します");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFocusMode(true);
+        showShortcutHint("思考エリアをフォーカス表示します");
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (expandedEditor) setExpandedEditor(null);
+        else if (focusMode) setFocusMode(false);
+        else if (showShortcutHelp) setShowShortcutHelp(false);
+        else if (showTemplatePanel) setShowTemplatePanel(false);
+        else if (openTopMenu) setOpenTopMenu(null);
+        else setSelectedCardId(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
     selectedCardId,
-    setSelectedCardId,
+    selectedCard,
+    selectedFocusItem,
+    allCards,
     focusMode,
-    setFocusMode,
     expandedEditor,
-    setExpandedEditor,
-    shortcutHint,
-    perspective,
-    openOutputComposer,
-    openMemoEditor,
-    baseCardClass,
-    selectedThoughtClass,
-    mutedQuestionClass,
-    changePerspective,
-    openInputEditor,
-    showLeft,
-    setShowLeft,
-    showRight,
-    setShowRight,
     showShortcutHelp,
-    setShowShortcutHelp,
     showTemplatePanel,
-    setShowTemplatePanel,
     openTopMenu,
-    setOpenTopMenu,
-    topMenuRef,
-    memoRef,
-    themeMode,
-    setThemeMode,
-    customLinkLabel,
-    setCustomLinkLabel,
-    customLinkUrl,
-    setCustomLinkUrl,
-    templates,
-    selectedTemplateId,
-    setSelectedTemplateId,
-    templateInstruction,
-    setTemplateInstruction,
-    templateIncludeInput,
-    setTemplateIncludeInput,
-    templateIncludeMemo,
-    setTemplateIncludeMemo,
-    templateIncludeOutput,
-    setTemplateIncludeOutput,
-    newTemplateTitle,
-    setNewTemplateTitle,
-    newTemplateContent,
-    setNewTemplateContent,
-    leftWidth,
-    rightWidth,
-    setDraggingLeft,
-    setDraggingRight,
-    pdfInputRef,
     pdfUrl,
-    pdfFileName,
     isPdfOpen,
-    pdfSide,
-    setPdfSide,
-    pdfWidth,
-    pdfPage,
-    setPdfPage,
-    pdfWorkMode,
-    setPdfWorkMode,
-    draggingPdf,
-    setDraggingPdf,
-    title,
-    topSections,
-    bottomSections,
-    allQuickLinks,
-    addCustomLink,
-    removeCustomLink,
-    toggleMemoAndScroll,
-    handleResourceLinkClick,
-    addTemplate,
-    removeTemplate,
-    selectedTemplate,
-    cardBlocks,
-    setRawWithCloudDirty,
-    setMemoWithCloudDirty,
-    setOutputWithCloudDirty,
-    updatePdfWidthFromClientX,
-    openPdfPicker,
-    handlePdfFileChange,
-    hidePdf,
-    clearPdf,
-    togglePdf,
-    createShare,
-    downloadMd,
-    copyMd,
-    saveToObsidian,
-    clearAll,
-    confirmLoadDemo,
-    insertTemplate,
-    toggleStar,
-    copyTemplateBundle,
-  } = useDeckState(props);
+  ]);
+
+  useEffect(() => {
+    if (!draggingLeft) return;
+    const onMove = (e: globalThis.MouseEvent) =>
+      setLeftWidth(Math.min(Math.max(e.clientX, 260), 680));
+    const onUp = () => setDraggingLeft(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingLeft]);
+
+  useEffect(() => {
+    if (!draggingRight) return;
+    const onMove = (e: globalThis.MouseEvent) =>
+      setRightWidth(
+        Math.min(Math.max(window.innerWidth - e.clientX, 260), 680),
+      );
+    const onUp = () => setDraggingRight(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingRight]);
+
+  const updatePdfWidthFromClientX = (clientX: number) => {
+    const nextWidth = pdfSide === "left" ? clientX : window.innerWidth - clientX;
+    setPdfWidth(clampPdfWidth(nextWidth));
+  };
+
+  useEffect(() => {
+    if (!draggingPdf) return;
+
+    const onMove = (e: globalThis.MouseEvent) => updatePdfWidthFromClientX(e.clientX);
+    const onUp = () => setDraggingPdf(false);
+    const onBlur = () => setDraggingPdf(false);
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onBlur);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [draggingPdf, pdfSide]);
+
+  const openPdfPicker = () => {
+    if (isMobileLike()) {
+      showShortcutHint("PDF表示はPCで利用できます");
+      return;
+    }
+    pdfInputRef.current?.click();
+  };
+
+  const handlePdfFileChange = (event: ReactChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    const nextUrl = URL.createObjectURL(file);
+    setPdfUrl(nextUrl);
+    setPdfFileName(file.name);
+    setIsPdfOpen(true);
+    showShortcutHint("PDFを開きました");
+
+    event.target.value = "";
+  };
+
+  const hidePdf = () => {
+    if (!pdfUrl) return;
+    setIsPdfOpen(false);
+    setDraggingPdf(false);
+    showShortcutHint("PDFを非表示にしました");
+  };
+
+  const clearPdf = () => {
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    setPdfUrl("");
+    setPdfFileName("");
+    setIsPdfOpen(false);
+    setDraggingPdf(false);
+    showShortcutHint("PDFを解除しました");
+  };
+
+  const togglePdf = () => {
+    if (!pdfUrl) {
+      openPdfPicker();
+      return;
+    }
+
+    setIsPdfOpen((prev) => {
+      const next = !prev;
+      showShortcutHint(next ? "PDFを表示しました" : "PDFを非表示にしました");
+      return next;
+    });
+  };
+
+  const createShare = async () => {
+    try {
+      let id = deckId;
+
+      // 初回だけINSERT
+      if (!id) {
+        try {
+          id = await createDeck({ title, raw, memo, output });
+        } catch (error) {
+          console.error("INSERT ERROR:", error);
+          return;
+        }
+
+        setDeckId(id);
+      } 
+      // 2回目以降はUPDATE（←ここが追加）
+      else {
+        try {
+          await updateDeck(id, { title, raw, memo, output });
+        } catch (error) {
+          console.error("UPDATE ERROR:", error);
+          return;
+        }
+      }
+
+      markDirty(false);
+
+      const deckPath = `/deck/${id}`;
+      const url = `${window.location.origin}${deckPath}`;
+      const longUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
+
+      setShareUrl(url);
+      setLongUrl(longUrl);
+      setQrError("");
+      setShowQr(true);
+
+      await navigator.clipboard.writeText(url);
+
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const downloadMd = () => {
+    const md = buildExportMarkdown(raw, addedCards, memo, output);
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${new Date().toISOString().slice(0, 10)}_${title}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyMd = async () => {
+    await navigator.clipboard.writeText(
+      buildExportMarkdown(raw, addedCards, memo, output),
+    );
+    setCopyStatus("MDコピー済");
+    window.setTimeout(() => setCopyStatus(""), 1800);
+  };
+
+  const saveToObsidian = async () => {
+    const md = buildObsidianMarkdown(raw, addedCards, memo, output, starred);
+    const timestamp = getTimestampSlug();
+    const fileTitle = getObsidianTitle(title, timestamp);
+    const filePath = `ThoughtDeck/${fileTitle}`;
+    const url = `obsidian://new?file=${encodeURIComponent(filePath)}&clipboard=true&append=true`;
+
+    // 長いMarkdown本文をURIに直接詰めると、ブラウザやOSのURI長制限でObsidianが起動しないことがある。
+    // 本文はクリップボードに置き、Obsidian URIの clipboard=true で取り込ませる。
+    await copyTextSafely(md);
+    setObsidianToast(`Obsidianに保存します：${fileTitle}`);
+    window.setTimeout(() => setObsidianToast(""), 2600);
+    window.location.href = url;
+  };
+
+  const clearAll = () => {
+    if (!confirm("全ての内容をまっさらにしますか？")) return;
+
+    setRaw(blankRaw);
+    setMemo("");
+    setOutput("");
+    setAddedCards([]);
+    setStarred([]);
+
+    setShareUrl("");
+    setLongUrl("");
+    setQrError("");
+    setShowQr(false);
+
+    setSelectedCardId(null);
+    setFocusMode(false);
+    setShowLeft(false);
+    setShowRight(false);
+
+    setDeckId(null); // ← ★これが足りなかった
+
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const loadDemo = () => {
+    setRaw(demoRaw);
+    setMemo("");
+    setOutput(demoOutput);
+    setAddedCards([]);
+    setStarred([]);
+    setShareUrl("");
+    setLongUrl("");
+    setQrError("");
+    setShowQr(false);
+    setSelectedCardId(null);
+    setFocusMode(false);
+    setShowLeft(false);
+    setShowRight(false);
+  };
+
+  const confirmLoadDemo = () => {
+    const ok = window.confirm(
+      "現在のInput・メモ・投稿文がデモ内容で上書きされます。よろしいですか？",
+    );
+
+    if (!ok) return;
+
+    loadDemo();
+  };
+
+  const insertTemplate = (kind: "top" | Area | "bottom") => {
+    setRawWithCloudDirty((prev) => {
+      if (kind === "top") return insertTopSectionTemplate(prev);
+      if (kind === "bottom") return insertBottomSectionTemplate(prev);
+      return insertCardTemplate(prev, kind);
+    });
+    setShowLeft(true);
+  };
+
+  const toggleStar = (id: string) => {
+    setStarred((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
   const renderOneColumnSection = (section: OneColumnSection) => {
     const isSelected = selectedCardId === section.id;
@@ -656,6 +2018,27 @@ export default function Home(props: UseDeckStateProps) {
         </section>
       </div>
     );
+  };
+
+  const buildTemplateCopyText = () => {
+    const sections: string[] = [];
+    if (selectedTemplate?.content.trim()) sections.push(selectedTemplate.content.trim());
+    if (templateInstruction.trim()) sections.push(templateInstruction.trim());
+
+    const selectedSources: string[] = [];
+    if (templateIncludeInput) selectedSources.push(`---\nInput\n---\n${raw.trim() || "（Inputなし）"}`);
+    if (templateIncludeMemo) selectedSources.push(`---\nメモ\n---\n${memo.trim() || "（メモなし）"}`);
+    if (templateIncludeOutput) selectedSources.push(`---\n投稿文\n---\n${output.trim() || "（投稿文なし）"}`);
+
+    return [...sections, ...selectedSources].join("\n\n");
+  };
+
+  const copyTemplateBundle = async () => {
+    const text = buildTemplateCopyText();
+    await navigator.clipboard.writeText(text);
+    setCopyStatus("コピーしました");
+    showShortcutHint("コピーしました");
+    window.setTimeout(() => setCopyStatus(""), 1200);
   };
 
   const renderTemplatePanel = () => {

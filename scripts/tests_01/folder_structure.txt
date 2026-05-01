@@ -18,11 +18,7 @@ lib/
 ├── deckService.ts
 ├── deckTypes.ts
 ├── supabase.ts
-├── useCloudSave.ts
-├── useDeckActions.ts
-├── useDeckCore.ts
-├── useDeckEditor.ts
-└── useDeckState.ts
+└── useCloudSave.ts
 
 components/
 ├── PDFViewer.tsx
