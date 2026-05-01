@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import { supabase } from "./supabase";
 
 type DeckPayload = {
@@ -8,14 +9,21 @@ type DeckPayload = {
 };
 
 export async function createDeck(deck: DeckPayload) {
-  const { data, error } = await supabase
-    .from("decks")
-    .insert(deck)
-    .select("id")
-    .single();
+  const id = nanoid();
 
-  if (error) throw error;
-  return data.id as string;
+  console.log("🔥 createDeck called");
+  console.log("🔥 generated id:", id);
+
+  const { error } = await supabase
+    .from("decks")
+    .insert({ id, ...deck });
+
+  if (error) {
+    console.error("🔥 insert error:", JSON.stringify(error, null, 2));
+    throw error;
+  }
+
+  return id;
 }
 
 export async function updateDeck(id: string, deck: DeckPayload) {
