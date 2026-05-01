@@ -1,11 +1,11 @@
 "use client";
 
+import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
+
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
-
-type Area = "left" | "center" | "right";
 
 type ParsedCard = {
   id: string;
@@ -80,9 +80,6 @@ const defaultQuickLinks = [
 
 type ResourceTemplate = { id: string; title: string; content: string };
 type ResourceState = { links: { label: string; url: string }[]; templates: ResourceTemplate[] };
-type ThemeMode = "auto" | "light" | "dark";
-type PdfSide = "left" | "right";
-type PdfWorkMode = "thought" | "input" | "memo" | "output";
 const THEME_STORAGE_KEY = "thoughtdeck:theme:v2";
 const PDF_VIEW_STORAGE_KEY = "thoughtdeck:pdf-view:v1";
 const PDF_MIN_WIDTH = 360;
