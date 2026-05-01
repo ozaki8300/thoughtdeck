@@ -2,11 +2,10 @@
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
 import { getTitle, isH1, isH2, isH3 } from "../lib/deckParser";
+import { QRModal } from "../components/QRModal";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { QRCodeSVG } from "qrcode.react";
 
 type ParsedCard = {
   id: string;
@@ -1475,17 +1474,6 @@ export default function Home() {
     } catch {}
   };
 
-  useEffect(() => {
-    if (!showQr) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [showQr]);
-
   const downloadMd = () => {
     const md = buildExportMarkdown(raw, addedCards, memo, output);
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
@@ -2538,66 +2526,14 @@ export default function Home() {
         </div>
       </header>
 
-      {showQr && typeof document !== "undefined" && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex min-h-[100dvh] items-center justify-center overflow-hidden bg-black/70 px-4 py-6 text-slate-100 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setShowQr(false);
-          }}
-        >
-          <section
-            className="flex max-h-[calc(100dvh-32px)] w-full max-w-[680px] flex-col items-center overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-4 shadow-2xl sm:p-6"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <h2 className="mb-1 w-full truncate text-center text-[13pt] font-bold text-white sm:text-[16pt]">
-              {title}
-            </h2>
-            <p className="mb-4 text-center text-[10pt] text-slate-300 sm:text-[11pt]">
-              QRまたはURLでDeckを共有
-            </p>
-
-            {qrError ? (
-              <div className="mb-4 w-full max-w-[520px] rounded-xl border border-slate-600 bg-slate-900 p-4 text-center text-[10.5pt] font-semibold leading-7 text-slate-100 sm:text-[11pt]">
-                {qrError}
-              </div>
-            ) : (
-              <div className="w-[min(70vw,240px)] shrink-0 rounded-2xl bg-white p-3 shadow-2xl sm:w-[320px] md:w-[380px]">
-                <QRCodeSVG
-                  value={shareUrl}
-                  size={420}
-                  level="L"
-                  className="block h-auto w-full"
-                />
-              </div>
-            )}
-
-            <div className="mt-4 w-full max-w-[560px] rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-[8.5pt] leading-[1.25] text-slate-100 shadow-2xl sm:text-[9.5pt]">
-              <p className="max-h-[3.8em] overflow-hidden break-all">{shareUrl}</p>
-            </div>
-
-            <div className="mt-4 grid w-full max-w-[560px] grid-cols-2 gap-3">
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(shareUrl);
-                  setCopyStatus("URLをコピーしました");
-                }}
-                className="min-h-10 rounded-lg border border-slate-500/80 bg-slate-900 px-3 py-2 text-[10.5pt] text-white transition hover:border-slate-200 hover:bg-slate-800 sm:text-[11pt]"
-              >
-                URLコピー
-              </button>
-              <button
-                onClick={() => setShowQr(false)}
-                className="min-h-10 rounded-lg border border-slate-500/80 bg-slate-900 px-3 py-2 text-[10.5pt] text-white transition hover:border-slate-200 hover:bg-slate-800 sm:text-[11pt]"
-              >
-                閉じる
-              </button>
-            </div>
-          </section>
-        </div>,
-        document.body,
-      )}
+      <QRModal
+        isOpen={showQr}
+        title={title}
+        shareUrl={shareUrl}
+        qrError={qrError}
+        onClose={() => setShowQr(false)}
+        onCopyUrl={() => setCopyStatus("URLをコピーしました")}
+      />
 
 
       <div className="flex h-[calc(100vh-70px)] overflow-hidden max-lg:h-auto max-lg:flex-col max-lg:overflow-visible">
