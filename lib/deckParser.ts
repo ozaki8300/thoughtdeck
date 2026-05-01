@@ -6,3 +6,18 @@ export function getTitle(raw: string) {
     );
   return line?.replace(/^#[ \t\u3000]+/, "").trim() || "タイトル未設定";
 }
+
+export function isH1(line: string) {
+  return /^#[ \t\u3000]+/.test(line.trimEnd()) && !/^##/.test(line.trimStart());
+}
+
+export function isH2(line: string) {
+  return (
+    /^##[ \t\u3000]+/.test(line.trimEnd()) &&
+    !/^###[ \t\u3000]+/.test(line.trimEnd())
+  );
+}
+
+export function isH3(line: string) {
+  return /^###[ \t\u3000]+/.test(line.trimEnd());
+}

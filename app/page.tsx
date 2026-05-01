@@ -1,7 +1,7 @@
 "use client";
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "../lib/deckTypes";
-import { getTitle } from "../lib/deckParser";
+import { getTitle, isH1, isH2, isH3 } from "../lib/deckParser";
 
 import type { CSSProperties, ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -195,21 +195,6 @@ function getObsidianTitle(title: string, timestamp: string) {
   if (!safeTitle || safeTitle === "タイトル" || safeTitle === "タイトル未設定")
     return timestamp;
   return `${timestamp}_${safeTitle}`;
-}
-
-function isH1(line: string) {
-  return /^#[ \t\u3000]+/.test(line.trimEnd()) && !/^##/.test(line.trimStart());
-}
-
-function isH2(line: string) {
-  return (
-    /^##[ \t\u3000]+/.test(line.trimEnd()) &&
-    !/^###[ \t\u3000]+/.test(line.trimEnd())
-  );
-}
-
-function isH3(line: string) {
-  return /^###[ \t\u3000]+/.test(line.trimEnd());
 }
 
 function normalizeDisplayLines(lines: string[]) {
