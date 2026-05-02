@@ -1,0 +1,83 @@
+"use client";
+
+import { SHORTCUTS } from "../lib/shortcutData";
+
+type ShortcutHelpProps = {
+  show: boolean;
+  onClose: () => void;
+  confirmLoadDemo: () => void;
+};
+
+export function ShortcutHelp({
+  show,
+  onClose,
+  confirmLoadDemo,
+}: ShortcutHelpProps) {
+  if (!show) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-[var(--td-overlay)] p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-bg)] shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--td-border)] px-5 py-4">
+          <div>
+            <p className="text-[10.5pt] text-[var(--td-muted)]">使い方 / Esc：閉じる</p>
+            <h2 className="text-[16pt] font-bold text-[var(--td-text)]">使い方</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]"
+          >
+            閉じる
+          </button>
+        </div>
+
+        <div className="no-scrollbar flex-1 overflow-auto p-6">
+          <div className="mx-auto max-w-2xl space-y-3">
+            <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+              <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">デモ</h3>
+              <p className="mb-4 text-[10.5pt] leading-6 text-[var(--td-muted)]">はじめて触るときは、サンプル内容を読み込んで動きを確認できます。</p>
+              <button
+                onClick={() => { onClose(); confirmLoadDemo(); }}
+                className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]"
+              >
+                デモを読み込む
+              </button>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+              <h3 className="mb-4 text-[13pt] font-bold text-[var(--td-accent)]">使い方</h3>
+              <div className="space-y-3">
+                {SHORTCUTS.map((s) => (
+                  <div
+                    key={s.key}
+                    className="grid grid-cols-[140px_1fr] items-center gap-4 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] px-4 py-3 text-[11pt]"
+                  >
+                    <span className="font-mono text-[var(--td-accent)]">{s.key}</span>
+                    <span className="text-[var(--td-text-soft)]">{s.description}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+              <h3 className="mb-4 text-[13pt] font-bold text-[var(--td-accent)]">書き方</h3>
+              <div className="space-y-3 font-mono text-[11pt] leading-7 text-[var(--td-text-soft)]">
+                <p><span className="text-[var(--td-accent)]"># タイトル</span></p>
+                <p><span className="text-[var(--td-accent)]">## 上部1カラム</span><span className="text-[var(--td-muted)]">（設問・前提など）</span></p>
+                <p><span className="text-[var(--td-accent)]">### 3カラムカード見出し</span></p>
+                <p><span className="text-[var(--td-muted)]">@area: left / center / right</span></p>
+                <p><span className="text-[var(--td-accent)]">## 下部1カラム</span><span className="text-[var(--td-muted)]">（まとめ・次回アクションなど）</span></p>
+                <p><span className="rounded bg-[var(--td-mark-bg)] px-1 text-[var(--td-text)]">==強調==</span><span className="mx-2 text-[var(--td-muted)]">/</span><strong className="text-[var(--td-accent)]">**太字**</strong><span className="ml-2 text-[var(--td-muted)]">に対応</span></p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

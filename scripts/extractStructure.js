@@ -3,29 +3,20 @@
 const fs = require("fs");
 const path = require("path");
 
-// ===== 設定 =====
 const TARGET_DIRS = ["app", "lib", "components"];
 const OUTPUT_DIR = "./scripts/projectfile_text";
-const TARGET_EXT = [".ts", ".tsx"];
+const TARGET_EXT = [".ts", ".tsx",".css"];
 
-// ===== ディレクトリ作成 =====
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 
-// ===== 拡張子判定 =====
 function isTargetFile(fileName) {
   return TARGET_EXT.some((ext) => fileName.endsWith(ext));
 }
 
-// ===== ファイル名変換 =====
-function toSafeName(filePath) {
-  return filePath.replace(/\//g, "__") + ".txt";
-}
-
-// ===== 全ファイル取得 =====
 function getAllFiles(dir, base = "") {
   const current = path.join(dir, base);
   const entries = fs.readdirSync(current, { withFileTypes: true });
@@ -53,7 +44,6 @@ function getAllFiles(dir, base = "") {
   return results;
 }
 
-// ===== ツリー構造生成（見やすい版） =====
 function buildTree(dir, prefix = "") {
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
@@ -86,35 +76,32 @@ function buildTree(dir, prefix = "") {
   return result;
 }
 
-// ===== メイン処理 =====
+function toSafeFileName(filePath) {
+  return filePath.replace(/[\/\\]/g, "__");
+}
+
 function main() {
   ensureDir(OUTPUT_DIR);
 
-  // ====================
-  // ① フォルダ構成出力
-  // ====================
-  let structure = "■ フォルダ構成（.ts/.tsxのみ）\n\n";
+  let allOutput = "";
+  let treeOutput = "■ フォルダ構成（.ts/.tsxのみ）\n\n";
 
+  // ===== ツリー作成 =====
   TARGET_DIRS.forEach((dir) => {
-    if (!fs.existsSync(dir)) {
-      structure += `❌ ${dir} not found\n`;
-      return;
-    }
+    if (!fs.existsSync(dir)) return;
 
-    structure += `${dir}/\n`;
-    structure += buildTree(dir);
-    structure += "\n";
+    treeOutput += `${dir}/\n`;
+    treeOutput += buildTree(dir);
+    treeOutput += "\n";
   });
 
   fs.writeFileSync(
-    path.join(OUTPUT_DIR, "folder_structure.txt"),
-    structure,
+    path.join(OUTPUT_DIR, "tree.txt"),
+    treeOutput,
     "utf-8"
   );
 
-  // ====================
-  // ② 各ファイルを個別に出力
-  // ====================
+  // ===== ファイル処理 =====
   TARGET_DIRS.forEach((dir) => {
     if (!fs.existsSync(dir)) return;
 
@@ -124,25 +111,40 @@ function main() {
       try {
         const content = fs.readFileSync(file.fullPath, "utf-8");
 
-        const outputFileName = toSafeName(file.original);
-        const outputPath = path.join(OUTPUT_DIR, outputFileName);
-
-        const output =
-          `====================\n` +
+        const header =
+          "====================\n" +
           `FILE: ${file.original}\n` +
-          `====================\n\n` +
-          content;
+          "====================\n\n";
 
-        fs.writeFileSync(outputPath, output, "utf-8");
+        // ===== ALL版 =====
+        allOutput += header + content + "\n\n";
+
+        // ===== 分割版 =====
+        const safeName = toSafeFileName(file.original);
+
+        fs.writeFileSync(
+          path.join(OUTPUT_DIR, `${safeName}.txt`),
+          header + content,
+          "utf-8"
+        );
+
       } catch (err) {
         console.error("❌ 読み込み失敗:", file.original);
       }
     });
   });
 
+  // ===== ALL出力 =====
+  fs.writeFileSync(
+    path.join(OUTPUT_DIR, "ALL.txt"),
+    allOutput,
+    "utf-8"
+  );
+
   console.log("✅ 完了");
-  console.log(`📁 出力先: ${OUTPUT_DIR}`);
+  console.log("・ALL.txt（統合）");
+  console.log("・tree.txt（構造）");
+  console.log("・分割ファイル（1ファイル1テキスト）");
 }
 
-// ===== 実行 =====
 main();

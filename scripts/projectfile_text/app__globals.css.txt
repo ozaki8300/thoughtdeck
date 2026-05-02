@@ -1,3 +1,7 @@
+====================
+FILE: app/globals.css
+====================
+
 @import "tailwindcss";
 
 :root {

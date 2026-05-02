@@ -10,6 +10,7 @@ app/
 ├── deck/
 │   └── [id]/
 │       └── page.tsx
+├── globals.css
 ├── layout.tsx
 └── page.tsx
 
@@ -17,6 +18,7 @@ lib/
 ├── deckParser.ts
 ├── deckService.ts
 ├── deckTypes.ts
+├── shortcutData.ts
 ├── supabase.ts
 ├── useCloudSave.ts
 ├── useDeckActions.ts
@@ -26,5 +28,6 @@ lib/
 
 components/
 ├── PDFViewer.tsx
-└── QRModal.tsx
+├── QRModal.tsx
+└── ShortcutHelp.tsx
 

@@ -3,6 +3,7 @@
 import type { Area, ThemeMode } from "../lib/deckTypes";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
+import { ShortcutHelp } from "../components/ShortcutHelp";
 import {
   THOUGHTDECK_HOME_URL,
   defaultQuickLinks,
@@ -17,7 +18,7 @@ import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckSt
 
 import type { CSSProperties } from "react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function renderInline(text: string) {
   const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
@@ -199,6 +200,7 @@ export default function Home(props: UseDeckStateProps) {
     expandedEditor,
     setExpandedEditor,
     shortcutHint,
+    setShortcutHint,
     perspective,
     openOutputComposer,
     openMemoEditor,
@@ -288,6 +290,137 @@ export default function Home(props: UseDeckStateProps) {
     toggleStar,
     copyTemplateBundle,
   } = useDeckState(props);
+
+  useEffect(() => {
+    const shown = localStorage.getItem("td_hint_shown");
+
+    if (!shown) {
+      setShortcutHint("I:Input / M:メモ / ?:使い方");
+
+      const timer = window.setTimeout(() => {
+        setShortcutHint("");
+      }, 4000);
+
+      localStorage.setItem("td_hint_shown", "1");
+
+      return () => window.clearTimeout(timer);
+    }
+  }, [setShortcutHint]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+
+      if (["INPUT", "TEXTAREA"].includes(tag)) return;
+
+      const key = e.key.toLowerCase();
+
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        setShowShortcutHelp(true);
+      }
+
+      if (key === "i") {
+        e.preventDefault();
+        setShowLeft((v) => !v);
+      }
+
+      if (key === "m") {
+        e.preventDefault();
+        setShowRight((v) => !v);
+      }
+
+      if (key === "p") {
+        e.preventDefault();
+        openOutputComposer();
+      }
+
+      if (key === "e") {
+        e.preventDefault();
+
+        if (selectedCardId === "td-output") {
+          openOutputComposer();
+        } else if (selectedCardId === "td-memo") {
+          openMemoEditor();
+        } else {
+          openInputEditor();
+        }
+      }
+
+      if (key === "f") {
+        e.preventDefault();
+        setFocusMode((v) => !v);
+      }
+
+      if (key === "s") {
+        e.preventDefault();
+        if (selectedCardId) {
+          toggleStar(selectedCardId);
+        }
+      }
+
+      if (key === "d") {
+        e.preventDefault();
+        togglePdf();
+      }
+
+      if (key === "q") {
+        e.preventDefault();
+        createShare();
+      }
+
+      if (key === "o") {
+        e.preventDefault();
+        saveToObsidian();
+      }
+
+      if (key === "t") {
+        e.preventDefault();
+        setShowTemplatePanel(true);
+      }
+
+      if (key === "v") {
+        e.preventDefault();
+        changePerspective();
+      }
+
+      if (key === "x") {
+        e.preventDefault();
+        downloadMd();
+      }
+
+      if (key === "escape") {
+        setExpandedEditor(null);
+        setFocusMode(false);
+        setShowTemplatePanel(false);
+        setShowShortcutHelp(false);
+      }
+
+      if ((e.ctrlKey || e.metaKey) && key === "enter") {
+        setExpandedEditor(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedCardId,
+    setShowLeft,
+    setShowRight,
+    openOutputComposer,
+    openMemoEditor,
+    openInputEditor,
+    setFocusMode,
+    toggleStar,
+    togglePdf,
+    createShare,
+    saveToObsidian,
+    setShowTemplatePanel,
+    changePerspective,
+    downloadMd,
+    setExpandedEditor,
+    setShowShortcutHelp,
+  ]);
 
   const renderOneColumnSection = (section: OneColumnSection) => {
     const isSelected = selectedCardId === section.id;
@@ -487,7 +620,7 @@ export default function Home(props: UseDeckStateProps) {
               <h2 className="text-[13pt] font-bold text-[var(--td-text)]">投稿文</h2>
             </div>
             <button onClick={openOutputComposer} className="rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]">
-              編集
+              編集 <span className="shortcut">(E)</span>
             </button>
           </div>
           <section
@@ -648,90 +781,6 @@ export default function Home(props: UseDeckStateProps) {
       </div>
     );
   };
-  const renderShortcutHelp = () => {
-    if (!showShortcutHelp) return null;
-
-    const shortcuts = [
-      ["F", "中央思考エリアをフォーカス"],
-      ["I", "Input表示／編集"],
-      ["M", "メモ編集"],
-      ["P", "投稿作成／編集"],
-      ["D", "PDFを開く／表示／非表示（PCのみ）"],
-      ["Shift + D", "PDFを解除（PCのみ）"],
-      ["1 / 2 / 3", "選択カードを 左 / 中 / 右 へ移動"],
-      ["↑ ↓ ← →", "カード選択を移動"],
-      ["S", "選択カードに★を付ける／外す"],
-      ["Esc", "閉じる／保存して閉じる"],
-      ["Ctrl + Enter", "保存して閉じる"],
-    ];
-
-    return (
-      <div
-        className="fixed inset-0 z-50 bg-[var(--td-overlay)] p-4 backdrop-blur-sm"
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setShowShortcutHelp(false);
-        }}
-      >
-        <section className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-bg)] shadow-2xl">
-          <div className="flex items-center justify-between gap-3 border-b border-[var(--td-border)] px-5 py-4">
-            <div>
-              <p className="text-[10.5pt] text-[var(--td-muted)]">使い方 / Esc：閉じる</p>
-              <h2 className="text-[16pt] font-bold text-[var(--td-text)]">使い方</h2>
-            </div>
-            <button
-              onClick={() => setShowShortcutHelp(false)}
-              className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]"
-            >
-              閉じる
-            </button>
-          </div>
-
-          <div className="no-scrollbar flex-1 overflow-auto p-6">
-            <div className="mx-auto max-w-2xl space-y-3">
-              <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
-                <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">デモ</h3>
-                <p className="mb-4 text-[10.5pt] leading-6 text-[var(--td-muted)]">はじめて触るときは、サンプル内容を読み込んで動きを確認できます。</p>
-                <button
-                  onClick={() => { setShowShortcutHelp(false); confirmLoadDemo(); }}
-                  className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]"
-                >
-                  デモを読み込む
-                </button>
-              </section>
-
-              <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
-                <h3 className="mb-4 text-[13pt] font-bold text-[var(--td-accent)]">使い方</h3>
-                <div className="space-y-3">
-                  {shortcuts.map(([key, description]) => (
-                    <div
-                      key={key}
-                      className="grid grid-cols-[140px_1fr] items-center gap-4 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] px-4 py-3 text-[11pt]"
-                    >
-                      <span className="font-mono text-[var(--td-accent)]">{key}</span>
-                      <span className="text-[var(--td-text-soft)]">{description}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
-                <h3 className="mb-4 text-[13pt] font-bold text-[var(--td-accent)]">書き方</h3>
-                <div className="space-y-3 font-mono text-[11pt] leading-7 text-[var(--td-text-soft)]">
-                  <p><span className="text-[var(--td-accent)]"># タイトル</span></p>
-                  <p><span className="text-[var(--td-accent)]">## 上部1カラム</span><span className="text-[var(--td-muted)]">（設問・前提など）</span></p>
-                  <p><span className="text-[var(--td-accent)]">### 3カラムカード見出し</span></p>
-                  <p><span className="text-[var(--td-muted)]">@area: left / center / right</span></p>
-                  <p><span className="text-[var(--td-accent)]">## 下部1カラム</span><span className="text-[var(--td-muted)]">（まとめ・次回アクションなど）</span></p>
-                  <p><span className="rounded bg-[var(--td-mark-bg)] px-1 text-[var(--td-text)]">==強調==</span><span className="mx-2 text-[var(--td-muted)]">/</span><strong className="text-[var(--td-accent)]">**太字**</strong><span className="ml-2 text-[var(--td-muted)]">に対応</span></p>
-                </div>
-              </section>
-            </div>
-          </div>
-        </section>
-      </div>
-    );
-  };
-
   const renderTemplatePanel = () => {
     if (!showTemplatePanel) return null;
 
@@ -815,7 +864,11 @@ export default function Home(props: UseDeckStateProps) {
       </div>
       {renderExpandedEditor()}
       {renderCentralFocus()}
-      {renderShortcutHelp()}
+      <ShortcutHelp
+        show={showShortcutHelp}
+        onClose={() => setShowShortcutHelp(false)}
+        confirmLoadDemo={confirmLoadDemo}
+      />
       {renderTemplatePanel()}
       <style jsx global>{`
         main[data-theme="light"] {
@@ -1031,7 +1084,7 @@ export default function Home(props: UseDeckStateProps) {
               className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
               title="投稿文を作成します"
             >
-              投稿（P）
+              投稿 <span className="shortcut">(P)</span>
             </button>
 
             <button
@@ -1039,7 +1092,7 @@ export default function Home(props: UseDeckStateProps) {
               className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
               title="Input欄を表示／非表示"
             >
-              Input
+              Input <span className="shortcut">(I)</span>
             </button>
 
             <button
@@ -1047,7 +1100,7 @@ export default function Home(props: UseDeckStateProps) {
               className={`${topButtonClass} ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
               title="メモ欄を表示／非表示"
             >
-              メモ
+              メモ <span className="shortcut">(M)</span>
             </button>
 
             <div className="relative">
@@ -1063,13 +1116,13 @@ export default function Home(props: UseDeckStateProps) {
                 <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
                   <p className="mb-2 text-[10pt] text-[var(--td-muted)]">よく使う操作</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { openMemoEditor(); setOpenTopMenu(null); }} className={topButtonClass}>メモ編集</button>
+                    <button onClick={() => { openMemoEditor(); setOpenTopMenu(null); }} className={topButtonClass}>メモ編集 <span className="shortcut">(E)</span></button>
                     <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
-                      {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"}
+                      {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
                     </button>
-                    <button onClick={() => { setShowShortcutHelp(true); setOpenTopMenu(null); }} className={topButtonClass}>使い方</button>
-                    <button onClick={() => { changePerspective(); setOpenTopMenu(null); }} className={topButtonClass}>視点: {perspective.label}</button>
-                    <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>テンプレ</button>
+                    <button onClick={() => { setShowShortcutHelp(true); setOpenTopMenu(null); }} className={topButtonClass}>使い方 <span className="shortcut">(?)</span></button>
+                    <button onClick={() => { changePerspective(); setOpenTopMenu(null); }} className={topButtonClass}>視点: {perspective.label} <span className="shortcut">(V)</span></button>
+                    <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>テンプレ <span className="shortcut">(T)</span></button>
                   </div>
 
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
@@ -1141,10 +1194,10 @@ export default function Home(props: UseDeckStateProps) {
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
                     <p className="mb-2 text-[10pt] text-[var(--td-muted)]">エクスポート</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>MD保存</button>
+                      <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>MD保存 <span className="shortcut">(X)</span></button>
                       <button onClick={() => { copyMd(); setOpenTopMenu(null); }} className={topButtonClass}>MDコピー</button>
-                      <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian保存</button>
-                      <button onClick={() => { createShare(); setOpenTopMenu(null); }} className={topButtonClass}>QR表示</button>
+                      <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian保存 <span className="shortcut">(O)</span></button>
+                      <button onClick={() => { createShare(); setOpenTopMenu(null); }} className={topButtonClass}>QR表示 <span className="shortcut">(Q)</span></button>
                     </div>
                   </div>
                 </div>
@@ -1217,7 +1270,7 @@ export default function Home(props: UseDeckStateProps) {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-[13pt] font-bold text-[var(--td-text)]">インプット</h2>
                     <div className="flex items-center gap-2">
-                      <button onClick={openInputEditor} className={panelButtonClass}>編集</button>
+                      <button onClick={openInputEditor} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
                     </div>
                   </div>
 
@@ -1275,7 +1328,7 @@ export default function Home(props: UseDeckStateProps) {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-[13pt] font-bold text-[var(--td-text)]">メモ</h2>
                     <div className="flex items-center gap-2">
-                      <button onClick={openMemoEditor} className={panelButtonClass}>編集</button>
+                      <button onClick={openMemoEditor} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
                     </div>
                   </div>
                   <section
@@ -1303,7 +1356,7 @@ export default function Home(props: UseDeckStateProps) {
             className={`${topButtonClass} flex-1 border-[var(--td-accent-border)] text-[var(--td-accent)]`}
             title="投稿文を作成します"
           >
-            投稿
+            投稿 <span className="shortcut">(P)</span>
           </button>
 
           <button
@@ -1311,7 +1364,7 @@ export default function Home(props: UseDeckStateProps) {
             className={`${topButtonClass} flex-1 ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
             title={showRight ? "メモ欄を閉じる" : "メモ欄までスクロール"}
           >
-            {showRight ? "▼ メモ" : "▶ メモ"}
+            {showRight ? "▼ メモ" : "▶ メモ"} <span className="shortcut">(M)</span>
           </button>
 
           <button
@@ -1319,7 +1372,7 @@ export default function Home(props: UseDeckStateProps) {
             className={`${topButtonClass} flex-1`}
             title="QRを表示します"
           >
-            QR
+            QR <span className="shortcut">(Q)</span>
           </button>
 
           <div className="relative">
@@ -1335,13 +1388,13 @@ export default function Home(props: UseDeckStateProps) {
               <div className="absolute bottom-12 right-0 z-50 w-[260px] rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
                 <p className="mb-2 text-[10pt] text-[var(--td-muted)]">スマホでは補助機能をここに集約</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => { setShowLeft((v) => !v); setOpenTopMenu(null); }} className={topButtonClass}>{showLeft ? "Input非表示" : "Input表示"}</button>
-                  <button onClick={() => { setShowShortcutHelp(true); setOpenTopMenu(null); }} className={topButtonClass}>使い方</button>
+                  <button onClick={() => { setShowLeft((v) => !v); setOpenTopMenu(null); }} className={topButtonClass}>{showLeft ? "Input非表示" : "Input表示"} <span className="shortcut">(I)</span></button>
+                  <button onClick={() => { setShowShortcutHelp(true); setOpenTopMenu(null); }} className={topButtonClass}>使い方 <span className="shortcut">(?)</span></button>
                   <button onClick={() => { setThemeMode((mode) => nextThemeMode(mode)); setOpenTopMenu(null); }} className={topButtonClass}>テーマ</button>
-                  <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>MD保存</button>
+                  <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>MD保存 <span className="shortcut">(X)</span></button>
                   <button onClick={() => { copyMd(); setOpenTopMenu(null); }} className={topButtonClass}>MDコピー</button>
-                  <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian</button>
-                  <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>テンプレ</button>
+                  <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
+                  <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>テンプレ <span className="shortcut">(T)</span></button>
                 </div>
                 <button
                   onClick={() => { clearAll(); setOpenTopMenu(null); }}
