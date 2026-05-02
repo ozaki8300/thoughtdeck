@@ -29,8 +29,8 @@ export function ShortcutHelp({
       <section className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-bg)] shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-[var(--td-border)] px-5 py-4">
           <div>
-            <p className="text-[10.5pt] text-[var(--td-muted)]">使い方 / Esc：閉じる</p>
-            <h2 className="text-[16pt] font-bold text-[var(--td-text)]">使い方</h2>
+            <p className="text-[10.5pt] text-[var(--td-muted)]">ガイド / Esc：閉じる</p>
+            <h2 className="text-[16pt] font-bold text-[var(--td-text)]">ガイド</h2>
           </div>
           <button
             onClick={onClose}
@@ -44,28 +44,13 @@ export function ShortcutHelp({
           <div className="mx-auto max-w-2xl space-y-3">
             <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
               <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">デモ</h3>
-              <p className="mb-4 text-[10.5pt] leading-6 text-[var(--td-muted)]">はじめて触るときは、サンプル内容を読み込んで動きを確認できます。</p>
+              <p className="mb-4 text-[10.5pt] leading-6 text-[var(--td-muted)]">迷ったらここを見る</p>
               <button
                 onClick={() => { onClose(); confirmLoadDemo(); }}
                 className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]"
               >
                 デモを読み込む
               </button>
-            </section>
-
-            <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
-              <h3 className="mb-4 text-[13pt] font-bold text-[var(--td-accent)]">使い方</h3>
-              <div className="space-y-3">
-                {SHORTCUTS.map((s) => (
-                  <div
-                    key={s.key}
-                    className="grid grid-cols-[140px_1fr] items-center gap-4 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] px-4 py-3 text-[11pt]"
-                  >
-                    <span className="font-mono text-[var(--td-accent)]">{s.key}</span>
-                    <span className="text-[var(--td-text-soft)]">{s.description}</span>
-                  </div>
-                ))}
-              </div>
             </section>
 
             <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
@@ -77,6 +62,21 @@ export function ShortcutHelp({
                 <p><span className="text-[var(--td-muted)]">@area: left / center / right</span></p>
                 <p><span className="text-[var(--td-accent)]">## 下部1カラム</span><span className="text-[var(--td-muted)]">（まとめ・次回アクションなど）</span></p>
                 <p><span className="rounded bg-[var(--td-mark-bg)] px-1 text-[var(--td-text)]">==強調==</span><span className="mx-2 text-[var(--td-muted)]">/</span><strong className="text-[var(--td-accent)]">**太字**</strong><span className="ml-2 text-[var(--td-muted)]">に対応</span></p>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+              <h3 className="mb-4 text-[13pt] font-bold text-[var(--td-accent)]">ショートカット</h3>
+              <div className="space-y-3">
+                {SHORTCUTS.map((s) => (
+                  <div
+                    key={s.key}
+                    className="grid grid-cols-[140px_1fr] items-center gap-4 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] px-4 py-3 text-[11pt]"
+                  >
+                    <span className="font-mono text-[var(--td-accent)]">{s.key}</span>
+                    <span className="text-[var(--td-text-soft)]">{s.description}</span>
+                  </div>
+                ))}
               </div>
             </section>
           </div>
