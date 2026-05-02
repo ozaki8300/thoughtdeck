@@ -508,9 +508,9 @@ export default function Home(props: UseDeckStateProps) {
     const isMemo = expandedEditor === "memo";
 
     const toggleOpen = (id: string) => {
-      setOpenCardIds(prev =>
+      setOpenCardIds((prev) =>
         prev.includes(id)
-          ? prev.filter(i => i !== id)
+          ? prev.filter((i) => i !== id)
           : [...prev, id]
       );
     };
@@ -523,23 +523,21 @@ export default function Home(props: UseDeckStateProps) {
       : setOutputWithCloudDirty;
 
     const placeholder = isInput
-      ? "思考の素材を書く（授業メモ・気づき・仮説など）"
+      ? "思考の素材を書く（事実・気づき・仮説）"
       : isMemo
-      ? "メモを書く..."
-      : "投稿を書く...";
+      ? "メモを書く"
+      : "★を使って投稿を書く";
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center">
 
-        {/* モーダル */}
-        <div className="w-[92%] h-[92%] max-w-6xl rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] shadow-xl flex flex-col">
+        <div className="w-[92%] h-[92%] max-w-6xl rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] shadow-xl flex flex-col overflow-hidden">
 
           {/* ヘッダー */}
-          <div className="flex items-center justify-between border-b border-[var(--td-border)] px-4 py-2">
+          <div className="flex items-center justify-between border-b border-[var(--td-border)] px-5 py-3 shrink-0">
             <div className="text-sm text-[var(--td-muted)]">
-              {isInput ? "Input" : isMemo ? "メモ" : "投稿作成（P）"}
+              {isInput ? "Input" : isMemo ? "メモ" : "投稿（P）"}
             </div>
-
             <button
               onClick={() => setExpandedEditor(null)}
               className="text-sm text-[var(--td-muted)]"
@@ -551,18 +549,18 @@ export default function Home(props: UseDeckStateProps) {
           {/* 本体 */}
           <div className="flex flex-1 overflow-hidden">
 
-            {/* 左：★視点 */}
+            {/* 左：カード */}
             {!isInput && !isMemo && starred.length > 0 && (
-              <div className="w-56 shrink-0 border-r border-[var(--td-border)] p-3 overflow-y-auto">
+              <div className="w-56 shrink-0 border-r border-[var(--td-border)] overflow-y-auto noise-less-scroll p-4">
 
-                <div className="text-[10pt] text-[var(--td-muted)] mb-2">
+                <div className="text-[10pt] text-[var(--td-muted)] mb-3">
                   ★視点
                 </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                   {cardBlocks
-                    .flatMap(block => [...block.left, ...block.center, ...block.right])
-                    .filter(card => starred.includes(card.id))
+                    .flatMap(b => [...b.left, ...b.center, ...b.right])
+                    .filter(c => starred.includes(c.id))
                     .map(card => {
                       const isOpen = openCardIds.includes(card.id);
 
@@ -570,16 +568,18 @@ export default function Home(props: UseDeckStateProps) {
                         <div
                           key={card.id}
                           onClick={() => toggleOpen(card.id)}
-                          className="border border-blue-400/20 rounded px-2 py-1 cursor-pointer"
+                          className={`border rounded px-3 py-2 cursor-pointer transition
+                            ${isOpen
+                              ? "border-[var(--td-accent)] bg-[var(--td-accent)]/5"
+                              : "border-blue-400/20"
+                            }`}
                         >
-                          {/* タイトル */}
                           <div className="text-[10pt] font-bold text-[var(--td-accent)]">
                             {card.title}
                           </div>
 
-                          {/* 中身（クリックで開閉） */}
                           {isOpen && (
-                            <div className="mt-1 text-[10pt] text-[var(--td-text-soft)] whitespace-pre-wrap">
+                            <div className="mt-2 text-[10pt]">
                               {renderMarkdownBlocks(card.lines.join("\n"))}
                             </div>
                           )}
@@ -587,33 +587,20 @@ export default function Home(props: UseDeckStateProps) {
                       );
                     })}
                 </div>
-
               </div>
             )}
 
-            {/* 右：エディタ */}
-            <div className="flex-1 flex flex-col">
+            {/* 右：エディタ（←ここが今回の核心） */}
+            <div className="flex-1 overflow-hidden flex">
+
               <textarea
                 autoFocus
                 value={value}
-                onChange={(event) => setValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    setExpandedEditor(null);
-                  }
-                  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    setExpandedEditor(null);
-                  }
-                }}
+                onChange={(e) => setValue(e.target.value)}
                 placeholder={placeholder}
-                className={`no-scrollbar flex-1 resize-none bg-[var(--td-editor)] p-6 text-[var(--td-text)] outline-none ${
-                  isInput
-                    ? "font-mono text-[12pt] leading-7"
-                    : "text-[13pt] leading-8"
-                }`}
+                className="w-full h-full resize-none bg-[var(--td-editor)] px-8 py-8 text-[var(--td-text)] outline-none overflow-y-auto noise-less-scroll text-[15pt] leading-9"
               />
+
             </div>
 
           </div>
@@ -923,12 +910,46 @@ export default function Home(props: UseDeckStateProps) {
         textarea::placeholder, input::placeholder {
           color: var(--td-muted) !important;
         }
+
         .no-scrollbar {
           scrollbar-width: none;
           -ms-overflow-style: none;
         }
         .no-scrollbar::-webkit-scrollbar {
           display: none;
+        }
+
+        /* ↓ここから追加 */
+
+        .noise-less-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+        }
+
+        .noise-less-scroll:hover {
+          scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+
+        .noise-less-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .noise-less-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .noise-less-scroll::-webkit-scrollbar-thumb {
+          background: transparent;
+          border-radius: 4px;
+          transition: background 0.2s;
+        }
+
+        .noise-less-scroll:hover::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.2);
+        }
+
+        .noise-less-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.35);
         }
       `}</style>
 
