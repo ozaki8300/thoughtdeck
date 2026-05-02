@@ -332,7 +332,11 @@ export default function Home(props: UseDeckStateProps) {
               event.stopPropagation();
               toggleStar(card.id);
             }}
-            className="shrink-0 text-[11pt] text-[var(--td-text)] hover:text-[var(--td-text)]"
+            className={`shrink-0 text-[11pt] ${
+              starred.includes(card.id)
+                ? "text-yellow-400"
+                : "text-[var(--td-muted)]"
+            } hover:text-yellow-300`}
             title="重要マーク"
           >
             {starred.includes(card.id) ? "★" : "☆"}
@@ -508,7 +512,7 @@ export default function Home(props: UseDeckStateProps) {
     const isMemo = expandedEditor === "memo";
 
     const toggleOpen = (id: string) => {
-      setOpenCardIds((prev) =>
+      setOpenCardIds((prev: string[]) =>
         prev.includes(id)
           ? prev.filter((i) => i !== id)
           : [...prev, id]
@@ -523,14 +527,13 @@ export default function Home(props: UseDeckStateProps) {
       : setOutputWithCloudDirty;
 
     const placeholder = isInput
-      ? "思考の素材を書く（事実・気づき・仮説）"
+      ? "思考の素材を書く（事実・気づき・仮説をそのまま書く）"
       : isMemo
-      ? "メモを書く"
-      : "★を使って投稿を書く";
+      ? "後から気づいたこと・補足を書く"
+      : "★で選んだ視点を使い、自分の言葉で投稿を書く";
 
     return (
       <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center">
-
         <div className="w-[92%] h-[92%] max-w-6xl rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] shadow-xl flex flex-col overflow-hidden">
 
           {/* ヘッダー */}
@@ -549,9 +552,9 @@ export default function Home(props: UseDeckStateProps) {
           {/* 本体 */}
           <div className="flex flex-1 overflow-hidden">
 
-            {/* 左：カード */}
+            {/* 左：★視点 */}
             {!isInput && !isMemo && starred.length > 0 && (
-              <div className="w-56 shrink-0 border-r border-[var(--td-border)] overflow-y-auto noise-less-scroll p-4">
+              <div className="w-56 shrink-0 border-r border-[var(--td-border)] p-4 overflow-y-auto noise-less-scroll">
 
                 <div className="text-[10pt] text-[var(--td-muted)] mb-3">
                   ★視点
@@ -559,8 +562,8 @@ export default function Home(props: UseDeckStateProps) {
 
                 <div className="flex flex-col gap-3">
                   {cardBlocks
-                    .flatMap(b => [...b.left, ...b.center, ...b.right])
-                    .filter(c => starred.includes(c.id))
+                    .flatMap(block => [...block.left, ...block.center, ...block.right])
+                    .filter(card => starred.includes(card.id))
                     .map(card => {
                       const isOpen = openCardIds.includes(card.id);
 
@@ -568,18 +571,25 @@ export default function Home(props: UseDeckStateProps) {
                         <div
                           key={card.id}
                           onClick={() => toggleOpen(card.id)}
-                          className={`border rounded px-3 py-2 cursor-pointer transition
+                          className={`
+                            group
+                            border rounded px-3 py-2 cursor-pointer
+                            transition-all duration-150 ease-out
+                            hover:-translate-y-[1px] hover:shadow-sm
                             ${isOpen
-                              ? "border-[var(--td-accent)] bg-[var(--td-accent)]/5"
-                              : "border-blue-400/20"
-                            }`}
+                              ? "border-[var(--td-accent)] bg-[var(--td-accent)]/5 shadow-sm"
+                              : "border-blue-400/20 hover:border-[var(--td-accent)]/60"
+                            }
+                          `}
                         >
-                          <div className="text-[10pt] font-bold text-[var(--td-accent)]">
+                          {/* タイトル */}
+                          <div className="text-[10pt] font-bold text-[var(--td-accent)] transition-all duration-150 group-hover:opacity-90">
                             {card.title}
                           </div>
 
+                          {/* 本文 */}
                           {isOpen && (
-                            <div className="mt-2 text-[10pt]">
+                            <div className="mt-2 text-[10pt] whitespace-pre-wrap leading-6 text-[var(--td-text-soft)]">
                               {renderMarkdownBlocks(card.lines.join("\n"))}
                             </div>
                           )}
@@ -590,25 +600,54 @@ export default function Home(props: UseDeckStateProps) {
               </div>
             )}
 
-            {/* 右：エディタ（←ここが今回の核心） */}
-            <div className="flex-1 overflow-hidden flex">
+              {/* 右：エディタ */}
+              <div className="flex-1 overflow-hidden flex flex-col">
 
-              <textarea
-                autoFocus
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder={placeholder}
-                className="w-full h-full resize-none bg-[var(--td-editor)] px-8 py-8 text-[var(--td-text)] outline-none overflow-y-auto noise-less-scroll text-[15pt] leading-9"
-              />
+                {/* ガイド */}
+                {!isInput && !isMemo && (
+                  <div className="px-8 pt-6 text-[11pt] text-[var(--td-muted)] shrink-0">
+                    ★で視点を選び、自分の言葉でまとめる
+                  </div>
+                )}
 
-            </div>
+                {/* textarea */}
+                <textarea
+                  autoFocus
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setExpandedEditor(null);
+                    }
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                      event.preventDefault();
+                      setExpandedEditor(null);
+                    }
+                  }}
+                  placeholder={placeholder}
+                  className={`
+                    flex-1 min-h-0
+                    resize-none
+                    overflow-y-auto noise-less-scroll
+                    bg-[var(--td-editor)]
+                    px-8 py-8
+                    text-[var(--td-text)]
+                    outline-none
+                    ${isInput
+                      ? "font-mono text-[13pt] leading-7"
+                      : "text-[15pt] leading-9 tracking-[0.01em]"
+                    }
+                  `}
+                />
+
+              </div>
 
           </div>
         </div>
       </div>
     );
   };
-
   const renderShortcutHelp = () => {
     if (!showShortcutHelp) return null;
 
