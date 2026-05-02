@@ -596,6 +596,18 @@ export default function Home(props: UseDeckStateProps) {
         <h2 className="text-xl font-bold">{title}</h2>
       </div>
 
+      {output && (
+        <div
+          onClick={() => setExpandedEditor("output")}
+          className="mb-4 cursor-pointer rounded-xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-4"
+        >
+          <div className="mb-1 text-[10pt] text-[var(--td-muted)]">投稿</div>
+          <div className="line-clamp-2 text-[12pt] text-[var(--td-text)]">
+            {output}
+          </div>
+        </div>
+      )}
+
       {topSections.length > 0 && (
         <div className="mb-5 space-y-4">
           {topSections.map(renderOneColumnSection)}
