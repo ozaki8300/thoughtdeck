@@ -1,0 +1,30 @@
+■ フォルダ構成（.ts/.tsxのみ）
+
+app/
+├── api/
+│   └── deck/
+│       ├── [id]/
+│       │   └── route.ts
+│       └── save/
+│           └── route.ts
+├── deck/
+│   └── [id]/
+│       └── page.tsx
+├── layout.tsx
+└── page.tsx
+
+lib/
+├── deckParser.ts
+├── deckService.ts
+├── deckTypes.ts
+├── supabase.ts
+├── useCloudSave.ts
+├── useDeckActions.ts
+├── useDeckCore.ts
+├── useDeckEditor.ts
+└── useDeckState.ts
+
+components/
+├── PDFViewer.tsx
+└── QRModal.tsx
+

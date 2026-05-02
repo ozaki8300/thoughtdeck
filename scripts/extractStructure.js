@@ -5,7 +5,7 @@ const path = require("path");
 
 // ===== 設定 =====
 const TARGET_DIRS = ["app", "lib", "components"];
-const OUTPUT_DIR = "./scripts/tests";
+const OUTPUT_DIR = "./scripts/projectfile_text";
 const TARGET_EXT = [".ts", ".tsx"];
 
 // ===== ディレクトリ作成 =====

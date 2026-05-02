@@ -1,0 +1,126 @@
+====================
+FILE: lib/useDeckActions.ts
+====================
+
+import type { SetStateAction } from "react";
+
+import type { Area } from "./deckTypes";
+import { isH1, isH2, isH3 } from "./deckParser";
+import type { Card } from "./useDeckCore";
+
+export function firstH3Index(raw: string) {
+  return raw.search(/^###[ \t\u3000]+/m);
+}
+
+export function firstBottomSectionIndex(raw: string) {
+  const h3Index = firstH3Index(raw);
+  if (h3Index < 0) return -1;
+  const rest = raw.slice(h3Index);
+  const match = rest.match(/^##[ \t\u3000]+/m);
+  return match?.index === undefined ? -1 : h3Index + match.index;
+}
+
+export function insertBlock(raw: string, index: number, template: string) {
+  if (index >= 0) {
+    return `${raw.slice(0, index).trimEnd()}\n\n${template}\n\n${raw.slice(index).trimStart()}`;
+  }
+  return `${raw.trimEnd()}\n\n${template}`;
+}
+
+export function insertTopSectionTemplate(raw: string) {
+  const h3Index = firstH3Index(raw);
+  const template = `## 設問\n- `;
+  return insertBlock(raw, h3Index, template);
+}
+
+export function insertCardTemplate(raw: string, area: Area) {
+  const bottomIndex = firstBottomSectionIndex(raw);
+  const template = `### 見出し\n@area: ${area}\n- `;
+  return insertBlock(raw, bottomIndex, template);
+}
+
+export function insertBottomSectionTemplate(raw: string) {
+  return `${raw.trimEnd()}\n\n## まとめ\n- `;
+}
+
+export function rawCardLocatorFromId(id: string) {
+  const match = id.match(/^raw-(\d+)-(\d+)-/);
+  if (!match) return null;
+  return {
+    h3Index: Number(match[1]),
+    areaBlockIndex: Number(match[2]),
+  };
+}
+
+export function changeRawCardArea(raw: string, cardId: string, nextArea: Area) {
+  const locator = rawCardLocatorFromId(cardId);
+  if (!locator) return raw;
+
+  const lines = raw.split("\n");
+  let currentH3Index = -1;
+  let h3LineIndex = -1;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (isH3(lines[i])) {
+      currentH3Index += 1;
+      if (currentH3Index === locator.h3Index) {
+        h3LineIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (h3LineIndex < 0) return raw;
+
+  let blockEnd = lines.length;
+  for (let i = h3LineIndex + 1; i < lines.length; i += 1) {
+    if (isH1(lines[i]) || isH2(lines[i]) || isH3(lines[i]) || lines[i].trim() === "---") {
+      blockEnd = i;
+      break;
+    }
+  }
+
+  const areaLineIndexes: number[] = [];
+  for (let i = h3LineIndex + 1; i < blockEnd; i += 1) {
+    if (lines[i].trim().startsWith("@area:")) areaLineIndexes.push(i);
+  }
+
+  const targetAreaLineIndex = areaLineIndexes[locator.areaBlockIndex];
+
+  if (targetAreaLineIndex !== undefined) {
+    lines[targetAreaLineIndex] = `@area: ${nextArea}`;
+  } else {
+    lines.splice(h3LineIndex + 1, 0, `@area: ${nextArea}`);
+  }
+
+  return lines.join("\n");
+}
+
+export function normalizeConclusionLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("-") ? `  ${trimmed}` : `  - ${trimmed}`;
+}
+
+export function appendCardToConclusion(raw: string, card: Card) {
+  const cardLines = [
+    `- ${card.title || "選択カード"}`,
+    ...card.lines.map(normalizeConclusionLine).filter(Boolean),
+  ].join("\n");
+
+  const summaryMatch = raw.match(/^##[ \t\u3000]+まとめ\s*$/m);
+
+  if (!summaryMatch || summaryMatch.index === undefined) {
+    return `${raw.trimEnd()}\n\n## まとめ\n${cardLines}\n`;
+  }
+
+  const insertAt = summaryMatch.index + summaryMatch[0].length;
+  const before = raw.slice(0, insertAt);
+  const after = raw.slice(insertAt);
+  const needsNewLine = after.startsWith("\n") ? "" : "\n";
+  return `${before}${needsNewLine}\n${cardLines}${after}`;
+}
+
+export function resolveTextStateAction(value: SetStateAction<string>, current: string) {
+  return typeof value === "function" ? value(current) : value;
+}
