@@ -18,7 +18,7 @@ import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckSt
 
 import type { CSSProperties } from "react";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function renderInline(text: string) {
   const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
@@ -179,6 +179,10 @@ function renderMarkdownBlocks(text: string, emptyText = "本文は素材欄に�
 
 export default function Home(props: UseDeckStateProps) {
   const [openCardIds, setOpenCardIds] = useState<string[]>([]);
+  const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
+  const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
   const {
     raw,
     memo,
@@ -203,12 +207,10 @@ export default function Home(props: UseDeckStateProps) {
     setShortcutHint,
     perspective,
     openOutputComposer,
-    openMemoEditor,
     baseCardClass,
     selectedThoughtClass,
     mutedQuestionClass,
     changePerspective,
-    openInputEditor,
     showLeft,
     setShowLeft,
     showRight,
@@ -290,6 +292,18 @@ export default function Home(props: UseDeckStateProps) {
     copyTemplateBundle,
   } = useDeckState(props);
 
+  const openMemoEditor = () => {
+    setSelectedCardId("td-memo");
+    setLastActivePanel("td-memo");
+    setExpandedEditor("memo");
+  };
+
+  const openInputEditor = () => {
+    setSelectedCardId("td-input");
+    setLastActivePanel("td-input");
+    setExpandedEditor("input");
+  };
+
   useEffect(() => {
     const shown = localStorage.getItem("td_hint_shown");
 
@@ -307,12 +321,23 @@ export default function Home(props: UseDeckStateProps) {
   }, [setShortcutHint]);
 
   useEffect(() => {
+    if (expandedEditor === "input") {
+      inputRef.current?.focus();
+    }
+
+    if (expandedEditor === "memo") {
+      memoRefLocal.current?.focus();
+    }
+  }, [expandedEditor]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-
-      if (["INPUT", "TEXTAREA"].includes(tag)) return;
-
       const key = e.key.toLowerCase();
+      const isTyping =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement;
+
+      if (isTyping && !["e", "r"].includes(key)) return;
 
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault();
@@ -337,12 +362,12 @@ export default function Home(props: UseDeckStateProps) {
       if (key === "e") {
         e.preventDefault();
 
-        if (selectedCardId === "td-output") {
-          openOutputComposer();
-        } else if (selectedCardId === "td-memo") {
-          openMemoEditor();
-        } else {
+        if (expandedEditor === null) {
           openInputEditor();
+        } else if (expandedEditor === "memo") {
+          openInputEditor();
+        } else {
+          openMemoEditor();
         }
       }
 
@@ -383,6 +408,13 @@ export default function Home(props: UseDeckStateProps) {
         changePerspective();
       }
 
+      if (key === "r") {
+        e.preventDefault();
+        if (showRight) {
+          setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"));
+        }
+      }
+
       if (key === "x") {
         e.preventDefault();
         downloadMd();
@@ -404,6 +436,8 @@ export default function Home(props: UseDeckStateProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     selectedCardId,
+    expandedEditor,
+    lastActivePanel,
     setShowLeft,
     setShowRight,
     openOutputComposer,
@@ -595,18 +629,6 @@ export default function Home(props: UseDeckStateProps) {
         <p className="text-[11pt] text-[var(--td-muted)]">タイトル</p>
         <h2 className="text-xl font-bold">{title}</h2>
       </div>
-
-      {output && (
-        <div
-          onClick={() => setExpandedEditor("output")}
-          className="mb-4 cursor-pointer rounded-xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-4"
-        >
-          <div className="mb-1 text-[10pt] text-[var(--td-muted)]">投稿</div>
-          <div className="line-clamp-2 text-[12pt] text-[var(--td-text)]">
-            {output}
-          </div>
-        </div>
-      )}
 
       {topSections.length > 0 && (
         <div className="mb-5 space-y-4">
@@ -1314,8 +1336,13 @@ export default function Home(props: UseDeckStateProps) {
                   </div>
 
                   <textarea
+                    ref={inputRef}
                     value={raw}
                     onChange={(e) => setRawWithCloudDirty(e.target.value)}
+                    onFocus={() => {
+                      setSelectedCardId("td-input");
+                      setLastActivePanel("td-input");
+                    }}
                     placeholder="思考の素材を書く（授業メモ・気づき・仮説など）"
                     className="no-scrollbar h-[calc(100vh-205px)] w-full resize-none rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[42vh]"
                   />
@@ -1359,19 +1386,41 @@ export default function Home(props: UseDeckStateProps) {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-[13pt] font-bold text-[var(--td-text)]">メモ</h2>
                     <div className="flex items-center gap-2">
-                      <button onClick={openMemoEditor} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
+                      <button onClick={() => setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"))} className={panelButtonClass}>表示切替 <span className="shortcut">(R)</span></button>
                     </div>
                   </div>
-                  <section
-                    onClick={() => setSelectedCardId("td-memo")}
-                    className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[34vh] ${
-                      selectedCardId === "td-memo"
-                        ? selectedThoughtClass
-                        : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
-                    }`}
-                  >
-                    {renderMarkdownBlocks(memo, "編集ボタンから、授業中の気づき・違和感・発言メモを自由に書きます。")}
-                  </section>
+                  {memoMode === "edit" ? (
+                    <textarea
+                      ref={memoRefLocal}
+                      value={memo}
+                      onChange={(event) => setMemoWithCloudDirty(event.target.value)}
+                      onFocus={() => {
+                        setSelectedCardId("td-memo");
+                        setLastActivePanel("td-memo");
+                      }}
+                      placeholder="授業中の気づき・違和感・発言メモを書く"
+                      className={`no-scrollbar h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:h-[34vh] ${
+                        selectedCardId === "td-memo"
+                          ? selectedThoughtClass
+                          : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+                      }`}
+                    />
+                  ) : (
+                    <section
+                      onClick={() => {
+                        setSelectedCardId("td-memo");
+                        setLastActivePanel("td-memo");
+                        setMemoMode("edit");
+                      }}
+                      className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[34vh] ${
+                        selectedCardId === "td-memo"
+                          ? selectedThoughtClass
+                          : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+                      }`}
+                    >
+                      {renderMarkdownBlocks(memo, "右上の表示切替で編集できます")}
+                    </section>
+                  )}
                   <p className="mt-2 text-right text-[11pt] text-[var(--td-muted)]">文字数：{memo.length}</p>
                 </aside>
               </>
