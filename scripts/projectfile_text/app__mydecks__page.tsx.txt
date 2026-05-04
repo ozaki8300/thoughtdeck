@@ -28,6 +28,7 @@ type QrHistoryItem = {
 
 const STORAGE_KEY = "thoughtdeck:mydecks:v1";
 const QR_HISTORY_STORAGE_KEY = "thoughtdeck:qr-history:v1";
+const DRAFT_STORAGE_KEY = "thoughtdeck:draft:v1";
 
 function loadSavedDecks() {
   if (typeof window === "undefined") return [];
@@ -172,6 +173,7 @@ export default function MyDecksPage() {
   const [filterMode, setFilterMode] = useState<"all" | "star">("all");
   const [importMessage, setImportMessage] = useState("");
   const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
+  const [hasDraft, setHasDraft] = useState(false);
   const sortedDecks = [...decks].sort((a, b) => {
     if (b.star !== a.star) return b.star - a.star;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -183,6 +185,14 @@ export default function MyDecksPage() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(decks));
   }, [decks]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setHasDraft(!!localStorage.getItem(DRAFT_STORAGE_KEY));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files) return;
@@ -210,11 +220,6 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
-    if (deck.thoughtdeck_url) {
-      window.location.assign(deck.thoughtdeck_url);
-      return;
-    }
-
     const encoded = encodeDeck({
       raw: deck.raw,
       memo: deck.memo,
@@ -223,7 +228,7 @@ export default function MyDecksPage() {
       starred: [],
     });
 
-    router.push(`/?d=${encoded}`);
+    router.push(`/thoughtdeck?d=${encoded}`);
   };
 
   const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
@@ -251,12 +256,23 @@ export default function MyDecksPage() {
             <p className="mt-1 text-sm text-slate-400">保存したThoughtDeckを読み込む</p>
           </div>
 
-          <button
-            onClick={() => router.push("/")}
-            className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
-          >
-            新しく思考する
-          </button>
+          <div className="flex gap-2">
+            {hasDraft && (
+              <button
+                onClick={() => router.push("/thoughtdeck")}
+                className="rounded-lg border border-yellow-400/60 px-4 py-2 text-sm text-yellow-200 transition hover:bg-yellow-500/20"
+              >
+                ▶ 続きから再開
+              </button>
+            )}
+
+            <button
+              onClick={() => router.push("/thoughtdeck?new=1")}
+              className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:bg-blue-500/20"
+            >
+              ＋ 新しく作る
+            </button>
+          </div>
 
           <input
             ref={fileRef}
@@ -311,10 +327,10 @@ export default function MyDecksPage() {
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-slate-400">
                 <p>Obsidianで保存したMarkdownファイルを読み込むと、ここにDeckが並びます。</p>
                 <button
-                  onClick={() => router.push("/")}
+                  onClick={() => router.push("/thoughtdeck?new=1")}
                   className="mt-4 rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
                 >
-                  新しく思考する
+                  ＋ 新しく作る
                 </button>
               </div>
             ) : (

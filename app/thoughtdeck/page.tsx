@@ -17,6 +17,7 @@ import {
   nextThemeMode,
   themeLabel,
   buildRestoreUrl,
+  decodeDeck,
   useDeckState,
 } from "../../lib/useDeckState";
 
@@ -26,6 +27,8 @@ import { createDeck, updateDeck } from "../../lib/deckService";
 import type { CSSProperties } from "react";
 
 import { use, useEffect, useRef, useState } from "react";
+
+const DRAFT_STORAGE_KEY = "thoughtdeck:draft:v1";
 
 function renderInline(text: string) {
   const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
@@ -195,6 +198,7 @@ export default function Home(props: HomeProps) {
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
   const [openMobileMenu, setOpenMobileMenu] = useState(false);
   const [openAbout, setOpenAbout] = useState(false);
+  const [isRestoredFromUrl, setIsRestoredFromUrl] = useState(false);
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
@@ -206,8 +210,11 @@ export default function Home(props: HomeProps) {
   };
   const {
     raw,
+    setRaw,
     memo,
+    setMemo,
     output,
+    setOutput,
     starred,
     saveStatus,
     copyStatus,
@@ -303,6 +310,8 @@ export default function Home(props: HomeProps) {
     setRawWithCloudDirty,
     setMemoWithCloudDirty,
     setOutputWithCloudDirty,
+    setAddedCards,
+    setStarred,
     updatePdfWidthFromClientX,
     openPdfPicker,
     handlePdfFileChange,
@@ -367,6 +376,74 @@ export default function Home(props: HomeProps) {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get("new") === "1") {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      setRaw("");
+      setMemo("");
+      setOutput("");
+      setAddedCards([]);
+      setStarred([]);
+      window.history.replaceState({}, "", "/thoughtdeck");
+      return;
+    }
+
+    const d = params.get("d");
+    if (d) {
+      try {
+        const decoded = decodeDeck(d);
+
+        if (decoded) {
+          setRaw(decoded.raw || "");
+          setMemo(decoded.memo || "");
+          setOutput(decoded.output || "");
+          setAddedCards(decoded.addedCards || []);
+          setStarred(decoded.starred || []);
+          setIsRestoredFromUrl(true);
+        }
+
+        window.history.replaceState({}, "", "/thoughtdeck");
+        return;
+      } catch {
+        console.error("decode failed");
+        window.history.replaceState({}, "", "/thoughtdeck");
+      }
+    }
+
+    const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (saved) {
+      try {
+        const data = JSON.parse(saved) as Partial<{
+          raw: string;
+          memo: string;
+          output: string;
+        }>;
+        setRaw(data.raw || "");
+        setMemo(data.memo || "");
+        setOutput(data.output || "");
+      } catch {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      }
+    }
+  }, [
+    setAddedCards,
+    setMemo,
+    setOutput,
+    setRaw,
+    setStarred,
+  ]);
+
+  useEffect(() => {
+    if (isRestoredFromUrl) return;
+
+    localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({ raw, memo, output }),
+    );
+  }, [raw, memo, output, isRestoredFromUrl]);
 
   const openMemoEditor = () => {
     setSelectedCardId("td-memo");
