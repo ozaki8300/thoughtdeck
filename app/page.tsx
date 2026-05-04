@@ -187,6 +187,7 @@ export default function Home(props: HomeProps) {
   const [openCardIds, setOpenCardIds] = useState<string[]>([]);
   const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
+  const [openMobileMenu, setOpenMobileMenu] = useState(false);
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
@@ -1538,7 +1539,48 @@ export default function Home(props: HomeProps) {
       </div>
 
       <footer className="sticky bottom-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 lg:hidden">
+        {openMobileMenu && (
+          <div className="absolute bottom-full right-2 mb-2 flex w-44 flex-col gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-2 shadow-2xl">
+            {!isReadOnly && (
+              <button
+                onClick={() => {
+                  saveToObsidian();
+                  setOpenMobileMenu(false);
+                }}
+                className={`${topButtonClass} w-full text-center`}
+              >
+                Obsidian保存
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setThemeMode((mode) => nextThemeMode(mode));
+                setOpenMobileMenu(false);
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              テーマ切替
+            </button>
+            <button
+              onClick={() => {
+                alert("About");
+                setOpenMobileMenu(false);
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              About
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={createShare}
+            disabled={isReadOnly}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            共有
+          </button>
+
           <button
             onClick={toggleMemoAndScroll}
             className={`${topButtonClass} flex-1 text-center`}
@@ -1555,20 +1597,11 @@ export default function Home(props: HomeProps) {
             </button>
           )}
 
-          {!isReadOnly && (
-            <button
-              onClick={saveToObsidian}
-              className={`${topButtonClass} flex-1 text-center`}
-            >
-              Obsidian
-            </button>
-          )}
-
           <button
-            onClick={() => setThemeMode((mode) => nextThemeMode(mode))}
+            onClick={() => setOpenMobileMenu((value) => !value)}
             className={`${topButtonClass} flex-1 text-center`}
           >
-            テーマ
+            ︙
           </button>
         </div>
       </footer>
