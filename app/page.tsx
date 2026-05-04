@@ -1585,14 +1585,12 @@ export default function Home(props: HomeProps) {
             メモ
           </button>
 
-          {!isReadOnly && (
-            <button
-              onClick={downloadMd}
-              className={`${topButtonClass} flex-1 text-center`}
-            >
-              保存
-            </button>
-          )}
+          <button
+            onClick={downloadMd}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            保存
+          </button>
 
           <button
             onClick={() => setOpenMobileMenu((value) => !value)}
