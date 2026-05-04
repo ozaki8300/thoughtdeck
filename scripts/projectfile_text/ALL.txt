@@ -2127,13 +2127,35 @@ function getDeckId(existingId?: string | null) {
   return id;
 }
 
+function yamlBlock(value: string | null | undefined) {
+  const text = value ?? "";
+  if (!text) return "    ";
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n");
+}
+
+function yamlSafe(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+}
+
+// 変更箇所: Markdown本文で空データを見える形にする
+function visible(value: string | null | undefined) {
+  return value && value.trim() ? value : "_(empty)_";
+}
+
 export function buildThoughtDeckMd({
   raw,
   memo,
   output,
   deckId,
 }: BuildThoughtDeckMdArgs) {
-  const title = getTitle(raw);
+  const title = getTitle(raw) || "Untitled Deck";
   const userId = getUserId();
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
@@ -2146,12 +2168,20 @@ version: 1
 user_id: ${userId}
 deck_id: ${deckIdFinal}
 
-created_at: ${now}
-updated_at: ${now}
+created_at: "${yamlSafe(now)}"
+updated_at: "${yamlSafe(now)}"
 
 thoughtdeck_url: ${thoughtdeckUrl}
 
-trigger:
+row:
+  raw: |
+${yamlBlock(raw)}
+  memo: |
+${yamlBlock(memo)}
+  output: |
+${yamlBlock(output)}
+
+trigger: []
 
 keywords: []
 links: []
@@ -2159,18 +2189,20 @@ links: []
 
 # ${title}
 
-## ThoughtDeck
+## 🧠 Raw
+${visible(raw)}
 
-### raw
-${raw ?? ""}
+---
 
-### memo
-${memo ?? ""}
+## ✍️ Memo
+${visible(memo)}
 
-### output
-${output ?? ""}
+---
 
-### trigger
+## 📤 Output
+${visible(output)}
+
+---
 `;
 }
 
