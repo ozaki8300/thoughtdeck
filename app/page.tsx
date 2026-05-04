@@ -1595,7 +1595,13 @@ export default function Home(props: HomeProps) {
           </button>
 
           <button
-            onClick={toggleMemoAndScroll}
+            onClick={() => {
+              const willCloseMemo = showRight;
+              toggleMemoAndScroll();
+              if (willCloseMemo) {
+                window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
+              }
+            }}
             className={`${topButtonClass} flex-1 text-center`}
           >
             メモ

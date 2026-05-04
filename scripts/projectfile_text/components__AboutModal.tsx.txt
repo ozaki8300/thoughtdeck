@@ -40,15 +40,17 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="min-h-0 flex-1 overflow-auto">
-          <p className="mb-3 text-center text-[10pt] text-slate-300 sm:text-[11pt]">
-            Think. Deck. Share.
-          </p>
-          <h2 className="mb-5 w-full text-center text-[13pt] font-bold text-white sm:text-[16pt]">
+          <h2 className="mb-3 w-full text-center text-[13pt] font-bold text-white sm:text-[16pt]">
             About ThoughtDeck
           </h2>
+          <p className="mb-5 text-center text-[10pt] text-slate-300 sm:text-[11pt]">
+            Think. Deck. Share.
+          </p>
 
           <div className="space-y-4 text-[10.5pt] leading-7 text-slate-100 sm:text-[11pt]">
             <p>ThoughtDeckは、思考を整理し、構造化し、その場で共有するためのWebアプリです。</p>
+
+            <hr className="border-slate-700" />
 
             <div>
               <p>Version: v0.1</p>
@@ -56,6 +58,8 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             </div>
 
             <p>© 2026 ThoughtDeck. All rights reserved.</p>
+
+            <hr className="border-slate-700" />
 
             <div>
               <p>本サービスの利用により生じたいかなる損害についても、開発者は責任を負いません。</p>
@@ -69,8 +73,11 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
             <div>
               <p>共有URLを知っている人は内容にアクセスできます。</p>
-              <p>機密情報の取り扱いにはご注意ください。</p>
+              <p>共有された内容は、閲覧者によって再共有される可能性があります。</p>
+              <p>公開範囲を十分にご確認のうえ、ご利用ください。</p>
             </div>
+
+            <p>機密情報の取り扱いにはご注意ください。</p>
 
             <p>外部アプリ（Obsidian等）との連携はユーザーの責任で行ってください。</p>
           </div>
