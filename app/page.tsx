@@ -1,6 +1,7 @@
 "use client";
 
 import type { Area, ThemeMode } from "../lib/deckTypes";
+import { AboutModal } from "../components/AboutModal";
 import { PDFViewer } from "../components/PDFViewer";
 import { QRModal } from "../components/QRModal";
 import { ShortcutHelp } from "../components/ShortcutHelp";
@@ -188,6 +189,7 @@ export default function Home(props: HomeProps) {
   const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
   const [openMobileMenu, setOpenMobileMenu] = useState(false);
+  const [openAbout, setOpenAbout] = useState(false);
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
@@ -1353,6 +1355,19 @@ export default function Home(props: HomeProps) {
                       </button>
                     </div>
                   )}
+
+                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">その他</p>
+                    <button
+                      onClick={() => {
+                        setOpenAbout(true);
+                        setOpenTopMenu(null);
+                      }}
+                      className={`${topButtonClass} w-full`}
+                    >
+                      About
+                    </button>
+                  </div>
                   </div>
                 )}
               </div>
@@ -1371,6 +1386,7 @@ export default function Home(props: HomeProps) {
         onClose={() => setShowQr(false)}
         onCopyUrl={() => setCopyStatus("URLをコピーしました")}
       />
+      <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
 
       <div className="flex h-[calc(100vh-70px)] overflow-hidden max-lg:h-auto max-lg:flex-col max-lg:overflow-visible">
@@ -1561,7 +1577,7 @@ export default function Home(props: HomeProps) {
             </button>
             <button
               onClick={() => {
-                alert("About");
+                setOpenAbout(true);
                 setOpenMobileMenu(false);
               }}
               className={`${topButtonClass} w-full text-center`}

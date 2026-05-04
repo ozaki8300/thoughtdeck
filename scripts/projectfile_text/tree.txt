@@ -30,6 +30,7 @@ lib/
 └── useDeckState.ts
 
 components/
+├── AboutModal.tsx
 ├── PDFViewer.tsx
 ├── QRModal.tsx
 └── ShortcutHelp.tsx
