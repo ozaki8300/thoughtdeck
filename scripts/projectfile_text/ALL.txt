@@ -1932,94 +1932,35 @@ export default function Home(props: HomeProps) {
         </PDFViewer>
       </div>
 
-      <footer className="sticky bottom-0 z-30 border-t border-[var(--td-border)] bg-[var(--td-bg)] p-2 lg:hidden">
-        <div data-td-menu-root className="mx-auto flex max-w-md items-center justify-between gap-2 rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1.5 shadow-2xl">
-          {!isReadOnly && (
-            <button
-              onClick={openOutputComposer}
-              className={`${topButtonClass} flex-1 border-[var(--td-accent-border)] text-[var(--td-accent)]`}
-              title="投稿文を作成します"
-            >
-              投稿 <span className="shortcut">(P)</span>
-            </button>
-          )}
-
+      <footer className="sticky bottom-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 lg:hidden">
+        <div className="flex items-center justify-between gap-2">
           <button
             onClick={toggleMemoAndScroll}
-            className={`${topButtonClass} flex-1 ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
-            title={showRight ? "メモ欄を閉じる" : "メモ欄までスクロール"}
+            className={`${topButtonClass} flex-1 text-center`}
           >
-            {showRight ? "▼ メモ" : "▶ メモ"} <span className="shortcut">(M)</span>
+            メモ
           </button>
 
-          {!isReadOnly && (
-            <button
-              onClick={createShare}
-              disabled={isReadOnly}
-              className={`${topButtonClass} flex-1`}
-              title="QRを表示します"
-            >
-              QR <span className="shortcut">(Q)</span>
-            </button>
-          )}
+          <button
+            onClick={downloadMd}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            保存
+          </button>
 
-          <div className="relative">
-            <button
-              onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
-              className={`${topButtonClass} min-w-11 px-3`}
-              title="その他の機能"
-            >
-              ︙
-            </button>
+          <button
+            onClick={saveToObsidian}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            Obsidian
+          </button>
 
-            {openTopMenu === "more" && (
-              <div className="absolute bottom-12 right-0 z-50 w-[260px] rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
-                <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {!isReadOnly && (
-                    <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
-                  )}
-                  {!isReadOnly && (
-                    <button onClick={() => { openMemoEditor(); setOpenTopMenu(null); }} className={`${topButtonClass} md:hidden`}>メモ編集 <span className="shortcut">(E)</span></button>
-                  )}
-                  {!isReadOnly && (
-                    <button onClick={() => { setShowLeft((v) => !v); setOpenTopMenu(null); }} className={topButtonClass}>
-                      {showLeft ? "素材非表示" : "素材表示"} <span className="shortcut">(I)</span>
-                    </button>
-                  )}
-                  <button onClick={() => { setThemeMode((mode) => nextThemeMode(mode)); setOpenTopMenu(null); }} className={topButtonClass}>テーマ</button>
-                </div>
-
-                <div className="mt-3 border-t border-[var(--td-border)] pt-3">
-                  <p className="mb-2 text-[10pt] text-[var(--td-muted)]">保存系</p>
-                  <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
-                  <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
-                  {!isReadOnly && (
-                    <button onClick={() => { createShare(); setOpenTopMenu(null); }} disabled={isReadOnly} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
-                  )}
-                  </div>
-                </div>
-
-                {!isReadOnly && (
-                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
-                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">危険操作</p>
-                    <button
-                      onClick={() => {
-                        if (isReadOnly) return;
-                        clearAll();
-                        setOpenTopMenu(null);
-                      }}
-                      disabled={isReadOnly}
-                      className="w-full rounded-lg border border-red-800 px-3 py-2 text-[11pt] text-red-400 hover:bg-red-950/40"
-                    >
-                      新規作成
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => setThemeMode((mode) => nextThemeMode(mode))}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            テーマ
+          </button>
         </div>
       </footer>
     </main>
