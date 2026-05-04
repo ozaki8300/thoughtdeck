@@ -415,10 +415,10 @@ export function useDeckState(props?: UseDeckStateProps) {
     setDraggingPdf,
   } = useDeckEditor(props);
 
-  const hasDParam =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("d");
-  const isReadOnly = props?.readOnly === true && !hasDParam;
+  const isReadOnly =
+    props?.readOnly === true ||
+    (typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("ro") === "1");
 
   const perspective = placeholderSets[perspectiveIndex];
 
@@ -699,22 +699,29 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const params = new URLSearchParams(window.location.search);
     const d = params.get("d");
 
     if (d) {
-      const decoded = decodeDeck(d);
-      if (decoded) {
-        setRaw(decoded.raw || blankRaw);
-        setMemo(decoded.memo || "");
-        setOutput(decoded.output || "");
-        setAddedCards(decoded.addedCards || []);
-        setStarred(decoded.starred || []);
+      try {
+        const json = decompressFromEncodedURIComponent(d);
+        if (!json) return;
+
+        const snapshot = JSON.parse(json) as Partial<DeckState>;
+
+        setRaw(snapshot.raw ?? "");
+        setMemo(snapshot.memo ?? "");
+        setOutput(snapshot.output ?? "");
+        setAddedCards(snapshot.addedCards ?? []);
+        setStarred(snapshot.starred ?? []);
         setShowLeft(false);
         setShowRight(false);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(decoded));
-        window.history.replaceState({}, "", window.location.pathname);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         return;
+      } catch (e) {
+        console.error("restore error:", e);
       }
     }
 
@@ -934,32 +941,33 @@ export function useDeckState(props?: UseDeckStateProps) {
     try {
       let id = deckId;
 
-      // 初回だけINSERT
       if (!id) {
-        try {
-          id = await createDeck({ title, raw, memo, output });
-        } catch (error) {
-          console.error("INSERT ERROR:", error);
-          return;
-        }
-
+        id = await createDeck({
+          title,
+          raw,
+          memo,
+          output,
+        });
         setDeckId(id);
-      } 
-      // 2回目以降はUPDATE（←ここが追加）
-      else {
-        try {
-          await updateDeck(id, { title, raw, memo, output });
-        } catch (error) {
-          console.error("UPDATE ERROR:", error);
-          return;
-        }
+      } else {
+        await updateDeck(id, {
+          title,
+          raw,
+          memo,
+          output,
+        });
       }
-
-      markDirty(false);
 
       const deckPath = `/deck/${id}`;
       const url = `${window.location.origin}${deckPath}`;
-      const longUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
+
+      const longUrl = buildRestoreUrl(
+        raw,
+        memo,
+        output,
+        addedCards,
+        starred,
+      );
 
       setShareUrl(url);
       setLongUrl(longUrl);

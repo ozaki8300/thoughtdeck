@@ -133,9 +133,10 @@ export async function POST(request: Request) {
 FILE: app/deck/[id]/page.tsx
 ====================
 
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { compressToEncodedURIComponent } from "lz-string";
+
 import { supabase } from "../../../lib/supabase";
-import Home from "../../page"; // ← これ追加
 
 type DeckPageProps = {
   params: Promise<{ id: string }>;
@@ -148,6 +149,17 @@ type SharedDeck = {
   memo: string | null;
 };
 
+function buildRestoreUrl(
+  raw: string,
+  memo: string,
+  output: string,
+  addedCards: [],
+  starred: string[],
+) {
+  const deck = { raw, memo, output, addedCards, starred };
+  return `/?d=${compressToEncodedURIComponent(JSON.stringify(deck))}`;
+}
+
 export default async function DeckPage({ params }: DeckPageProps) {
   const { id } = await params;
 
@@ -157,47 +169,19 @@ export default async function DeckPage({ params }: DeckPageProps) {
     .eq("id", id)
     .maybeSingle<SharedDeck>();
 
-  if (error) {
-    console.error("deck page fetch error:", error);
-    return (
-      <main className="min-h-screen bg-slate-950 px-5 py-10 text-slate-100">
-        <section className="mx-auto max-w-4xl rounded-xl border border-slate-700 bg-slate-900 p-6">
-          <h1 className="text-xl font-bold">Deckの取得に失敗しました</h1>
-          <p className="mt-3 text-sm text-slate-300">時間をおいてもう一度開いてください。</p>
-        </section>
-      </main>
-    );
-  }
+  if (error || !data) notFound();
 
-  if (!data) notFound();
-
-  const title = data.title?.trim() || "タイトル未設定";
-  const raw = data.raw?.trim() || "（Inputなし）";
-  const output = data.output?.trim() || "（投稿文なし）";
-  const memo = data.memo?.trim() || "（メモなし）";
-
-  return (
-    <Home
-      initialData={{
-        raw: data.raw ?? "",
-        memo: data.memo ?? "",
-        output: data.output ?? "",
-        title: data.title ?? "",
-      }}
-      readOnly={true}
-    />
+  const longUrl = buildRestoreUrl(
+    data.raw ?? "",
+    data.memo ?? "",
+    data.output ?? "",
+    [],
+    [],
   );
-}
 
-function ReadOnlySection({ title, value }: { title: string; value: string }) {
-  return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="mb-3 text-base font-bold text-blue-300">{title}</h2>
-      <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-100">
-        {value}
-      </pre>
-    </section>
-  );
+  const url = new URL(longUrl, "http://localhost:3000");
+  url.searchParams.set("ro", "1");
+  redirect(url.toString());
 }
 
 
@@ -310,7 +294,7 @@ import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckSt
 
 import type { CSSProperties } from "react";
 
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 
 function renderInline(text: string) {
   const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
@@ -469,12 +453,22 @@ function renderMarkdownBlocks(text: string, emptyText = "本文は素材欄に�
   return <div className="space-y-1 break-words">{elements}</div>;
 }
 
-export default function Home(props: UseDeckStateProps) {
+type HomeProps = UseDeckStateProps & {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export default function Home(props: HomeProps) {
   const [openCardIds, setOpenCardIds] = useState<string[]>([]);
   const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
+  const searchParams = use(props.searchParams);
+  const snapshotReadOnly = searchParams.ro === "1";
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
+  const mergedProps = {
+    ...props,
+    readOnly: props.readOnly || snapshotReadOnly,
+  };
   const {
     raw,
     memo,
@@ -583,7 +577,7 @@ export default function Home(props: UseDeckStateProps) {
     toggleStar,
     copyTemplateBundle,
     isReadOnly,
-  } = useDeckState(props);
+  } = useDeckState(mergedProps);
 
   const openMemoEditor = () => {
     setSelectedCardId("td-memo");
@@ -3238,10 +3232,10 @@ export function useDeckState(props?: UseDeckStateProps) {
     setDraggingPdf,
   } = useDeckEditor(props);
 
-  const hasDParam =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("d");
-  const isReadOnly = props?.readOnly === true && !hasDParam;
+  const isReadOnly =
+    props?.readOnly === true ||
+    (typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("ro") === "1");
 
   const perspective = placeholderSets[perspectiveIndex];
 
@@ -3522,22 +3516,29 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const params = new URLSearchParams(window.location.search);
     const d = params.get("d");
 
     if (d) {
-      const decoded = decodeDeck(d);
-      if (decoded) {
-        setRaw(decoded.raw || blankRaw);
-        setMemo(decoded.memo || "");
-        setOutput(decoded.output || "");
-        setAddedCards(decoded.addedCards || []);
-        setStarred(decoded.starred || []);
+      try {
+        const json = decompressFromEncodedURIComponent(d);
+        if (!json) return;
+
+        const snapshot = JSON.parse(json) as Partial<DeckState>;
+
+        setRaw(snapshot.raw ?? "");
+        setMemo(snapshot.memo ?? "");
+        setOutput(snapshot.output ?? "");
+        setAddedCards(snapshot.addedCards ?? []);
+        setStarred(snapshot.starred ?? []);
         setShowLeft(false);
         setShowRight(false);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(decoded));
-        window.history.replaceState({}, "", window.location.pathname);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         return;
+      } catch (e) {
+        console.error("restore error:", e);
       }
     }
 
@@ -3757,32 +3758,33 @@ export function useDeckState(props?: UseDeckStateProps) {
     try {
       let id = deckId;
 
-      // 初回だけINSERT
       if (!id) {
-        try {
-          id = await createDeck({ title, raw, memo, output });
-        } catch (error) {
-          console.error("INSERT ERROR:", error);
-          return;
-        }
-
+        id = await createDeck({
+          title,
+          raw,
+          memo,
+          output,
+        });
         setDeckId(id);
-      } 
-      // 2回目以降はUPDATE（←ここが追加）
-      else {
-        try {
-          await updateDeck(id, { title, raw, memo, output });
-        } catch (error) {
-          console.error("UPDATE ERROR:", error);
-          return;
-        }
+      } else {
+        await updateDeck(id, {
+          title,
+          raw,
+          memo,
+          output,
+        });
       }
-
-      markDirty(false);
 
       const deckPath = `/deck/${id}`;
       const url = `${window.location.origin}${deckPath}`;
-      const longUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
+
+      const longUrl = buildRestoreUrl(
+        raw,
+        memo,
+        output,
+        addedCards,
+        starred,
+      );
 
       setShareUrl(url);
       setLongUrl(longUrl);

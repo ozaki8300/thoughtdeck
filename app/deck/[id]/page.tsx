@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { compressToEncodedURIComponent } from "lz-string";
+
 import { supabase } from "../../../lib/supabase";
-import Home from "../../page"; // ← これ追加
 
 type DeckPageProps = {
   params: Promise<{ id: string }>;
@@ -13,6 +14,17 @@ type SharedDeck = {
   memo: string | null;
 };
 
+function buildRestoreUrl(
+  raw: string,
+  memo: string,
+  output: string,
+  addedCards: [],
+  starred: string[],
+) {
+  const deck = { raw, memo, output, addedCards, starred };
+  return `/?d=${compressToEncodedURIComponent(JSON.stringify(deck))}`;
+}
+
 export default async function DeckPage({ params }: DeckPageProps) {
   const { id } = await params;
 
@@ -22,45 +34,17 @@ export default async function DeckPage({ params }: DeckPageProps) {
     .eq("id", id)
     .maybeSingle<SharedDeck>();
 
-  if (error) {
-    console.error("deck page fetch error:", error);
-    return (
-      <main className="min-h-screen bg-slate-950 px-5 py-10 text-slate-100">
-        <section className="mx-auto max-w-4xl rounded-xl border border-slate-700 bg-slate-900 p-6">
-          <h1 className="text-xl font-bold">Deckの取得に失敗しました</h1>
-          <p className="mt-3 text-sm text-slate-300">時間をおいてもう一度開いてください。</p>
-        </section>
-      </main>
-    );
-  }
+  if (error || !data) notFound();
 
-  if (!data) notFound();
-
-  const title = data.title?.trim() || "タイトル未設定";
-  const raw = data.raw?.trim() || "（Inputなし）";
-  const output = data.output?.trim() || "（投稿文なし）";
-  const memo = data.memo?.trim() || "（メモなし）";
-
-  return (
-    <Home
-      initialData={{
-        raw: data.raw ?? "",
-        memo: data.memo ?? "",
-        output: data.output ?? "",
-        title: data.title ?? "",
-      }}
-      readOnly={true}
-    />
+  const longUrl = buildRestoreUrl(
+    data.raw ?? "",
+    data.memo ?? "",
+    data.output ?? "",
+    [],
+    [],
   );
-}
 
-function ReadOnlySection({ title, value }: { title: string; value: string }) {
-  return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="mb-3 text-base font-bold text-blue-300">{title}</h2>
-      <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-100">
-        {value}
-      </pre>
-    </section>
-  );
+  const url = new URL(longUrl, "http://localhost:3000");
+  url.searchParams.set("ro", "1");
+  redirect(url.toString());
 }

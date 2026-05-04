@@ -22,7 +22,7 @@ import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckSt
 
 import type { CSSProperties } from "react";
 
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 
 function renderInline(text: string) {
   const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
@@ -181,12 +181,22 @@ function renderMarkdownBlocks(text: string, emptyText = "本文は素材欄に�
   return <div className="space-y-1 break-words">{elements}</div>;
 }
 
-export default function Home(props: UseDeckStateProps) {
+type HomeProps = UseDeckStateProps & {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export default function Home(props: HomeProps) {
   const [openCardIds, setOpenCardIds] = useState<string[]>([]);
   const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
+  const searchParams = use(props.searchParams);
+  const snapshotReadOnly = searchParams.ro === "1";
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
+  const mergedProps = {
+    ...props,
+    readOnly: props.readOnly || snapshotReadOnly,
+  };
   const {
     raw,
     memo,
@@ -295,7 +305,7 @@ export default function Home(props: UseDeckStateProps) {
     toggleStar,
     copyTemplateBundle,
     isReadOnly,
-  } = useDeckState(props);
+  } = useDeckState(mergedProps);
 
   const openMemoEditor = () => {
     setSelectedCardId("td-memo");
