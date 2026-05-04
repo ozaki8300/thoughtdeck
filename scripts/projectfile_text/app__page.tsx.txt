@@ -22,6 +22,7 @@ import {
 } from "../lib/useDeckState";
 import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckState";
 import { createDeck, updateDeck } from "../lib/deckService";
+import { useRouter } from "next/navigation";
 
 import type { CSSProperties } from "react";
 
@@ -188,7 +189,10 @@ type HomeProps = UseDeckStateProps & {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
+const QR_HISTORY_STORAGE_KEY = "thoughtdeck:qr-history:v1";
+
 export default function Home(props: HomeProps) {
+  const router = useRouter();
   const [openCardIds, setOpenCardIds] = useState<string[]>([]);
   const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
@@ -347,6 +351,24 @@ export default function Home(props: HomeProps) {
       );
       const shareUrl = `${window.location.origin}/deck/${id}?ro=1`;
       const copyUrl = `${longUrl}&ro=1`;
+      const qrHistoryItem = {
+        id,
+        created_at: new Date().toISOString(),
+        title,
+        thoughtdeck_url: shareUrl,
+      };
+
+      try {
+        const saved = localStorage.getItem(QR_HISTORY_STORAGE_KEY);
+        const history = saved ? JSON.parse(saved) : [];
+        const nextHistory = [
+          qrHistoryItem,
+          ...history.filter((item: { id?: string }) => item.id !== id),
+        ].slice(0, 20);
+        localStorage.setItem(QR_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+      } catch {
+        localStorage.setItem(QR_HISTORY_STORAGE_KEY, JSON.stringify([qrHistoryItem]));
+      }
 
       setShareUrl(shareUrl);
       setLongUrl(copyUrl);
@@ -1203,6 +1225,13 @@ export default function Home(props: HomeProps) {
             )}
 
             <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
+              <button
+                onClick={() => router.push("/mydecks")}
+                className={topButtonClass}
+              >
+                MyDecks
+              </button>
+
               {!isReadOnly && (
                 <button
                   onClick={changePerspective}
