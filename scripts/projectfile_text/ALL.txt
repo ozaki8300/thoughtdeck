@@ -134,6 +134,7 @@ FILE: app/deck/[id]/page.tsx
 ====================
 
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { compressToEncodedURIComponent } from "lz-string";
 
 import { supabase } from "../../../lib/supabase";
@@ -179,7 +180,16 @@ export default async function DeckPage({ params }: DeckPageProps) {
     [],
   );
 
-  const url = new URL(longUrl, "http://localhost:3000");
+  const headersList = await headers();
+  const host =
+    headersList.get("x-forwarded-host") ??
+    headersList.get("host") ??
+    "localhost:3000";
+  const proto =
+    headersList.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  const request = { url: `${proto}://${host}` };
+  const url = new URL(longUrl, request.url);
   url.searchParams.set("ro", "1");
   redirect(url.toString());
 }
@@ -269,6 +279,179 @@ export default function RootLayout({
   );
 }
 
+
+====================
+FILE: app/mydecks/page.tsx
+====================
+
+"use client";
+
+import { useEffect, useState } from "react";
+import matter from "gray-matter";
+
+type Deck = {
+  title: string;
+  summary: string;
+  created_at: string;
+  thoughtdeck_url: string;
+  is_starred?: boolean;
+  raw?: string;
+};
+
+const STORAGE_KEY = "mydecks:v1";
+
+function formatTitle(title: string) {
+  return title
+    .replace(/^\d{4}-\d{2}-\d{2}[_\d-]*/, "")
+    .replace(".md", "")
+    .replace(/_/g, " ")
+    .trim();
+}
+
+export default function MyDecksPage() {
+  const [decks, setDecks] = useState<Deck[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setDecks(JSON.parse(saved));
+      } catch {
+        setDecks([]);
+      }
+    }
+  }, []);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newDecks: Deck[] = [];
+
+    for (let file of Array.from(files)) {
+      const text = await file.text();
+      const { data, content } = matter(text);
+
+      newDecks.push({
+        title: data.title || file.name,
+        summary: data.summary || "",
+        created_at: data.created_at || new Date().toISOString(),
+
+        // ★完全対応
+        thoughtdeck_url: data.thoughtdeck_url || data.url || "",
+
+        is_starred: data.starred || false,
+        raw: content,
+      });
+    }
+
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const existing = saved ? JSON.parse(saved) : [];
+
+    const merged = [...newDecks, ...existing];
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    setDecks(merged);
+  };
+
+  const handleClick = (deck: Deck) => {
+    console.log("URL:", deck.thoughtdeck_url); // ←確認用
+
+    if (deck.thoughtdeck_url) {
+      window.open(deck.thoughtdeck_url);
+    } else {
+      alert("このDeckにはURLがありません");
+    }
+  };
+
+  const handleClear = () => {
+    const ok = confirm("書庫をすべて削除しますか？");
+    if (!ok) return;
+
+    localStorage.removeItem(STORAGE_KEY);
+    setDecks([]);
+  };
+
+  return (
+    <div className="h-screen flex bg-[#0f1115] text-white">
+      <aside className="w-48 px-4 py-6">
+        <div className="text-sm text-gray-300 mb-4">My Decks</div>
+        <div className="text-sm text-gray-500">QR履歴</div>
+      </aside>
+
+      <main className="flex-1 px-10 py-8">
+        <div className="flex justify-end items-center gap-4 mb-10">
+          <button
+            onClick={handleClear}
+            className="text-xs text-gray-500 hover:text-red-400"
+          >
+            クリア
+          </button>
+
+          <input
+            type="file"
+            accept=".md"
+            multiple
+            onChange={handleImport}
+            className="hidden"
+            id="md-upload"
+          />
+
+          <label
+            htmlFor="md-upload"
+            className="text-blue-400 text-sm cursor-pointer hover:opacity-80"
+          >
+            Obsidianから探す →
+          </label>
+        </div>
+
+        <section>
+          <div className="text-xs text-gray-400 mb-6">書庫</div>
+
+          <div className="border border-gray-800 rounded-lg overflow-hidden">
+            {decks.length === 0 && (
+              <div className="text-gray-500 text-sm p-6">
+                mdファイルを取り込んでください
+              </div>
+            )}
+
+            {decks.map((d, i) => (
+              <div
+                key={i}
+                onClick={() => handleClick(d)}
+                className="flex justify-between items-center px-4 py-4 border-b border-gray-800 cursor-pointer hover:bg-gray-800 transition"
+              >
+                <div>
+                  <div className="text-sm text-white">
+                    {formatTitle(d.title)}
+                  </div>
+
+                  <div className="text-xs text-gray-400 mt-1">
+                    {d.summary}
+                  </div>
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  {d.created_at?.slice(0, 10)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-16 opacity-60">
+          <div className="text-xs text-gray-500 mb-3">
+            共有された思考
+          </div>
+
+          <div className="text-sm text-gray-500">
+            （まだありません）
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
 
 ====================
 FILE: app/page.tsx
@@ -1391,8 +1574,8 @@ export default function Home(props: HomeProps) {
         </div>
       )}
 
-      <header className="flex min-h-[70px] flex-wrap items-center justify-between gap-3 border-b border-[var(--td-border)] px-6 py-3">
-        <div>
+      <header className="flex min-h-[70px] items-center border-b border-[var(--td-border)] px-6 py-3">
+        <div className="min-w-0 flex-1">
           <h1 className="text-[20px] font-bold leading-tight">
             <a
               href={THOUGHTDECK_HOME_URL}
@@ -1406,71 +1589,72 @@ export default function Home(props: HomeProps) {
           <p className="text-[11pt] text-[var(--td-muted)]">Think. Deck. Share.</p>
         </div>
 
-        <div className="hidden flex-wrap items-center justify-end gap-3 lg:flex">
-          <span className="text-[11pt] text-blue-400">✔ {saveStatus}</span>
-          {copyStatus && (
-            <span className="text-[11pt] text-[var(--td-text)]">{copyStatus}</span>
-          )}
-
-          <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
-            {!isReadOnly && (
-              <button
-                onClick={changePerspective}
-                className={topButtonClass}
-                title="視点を変更"
-              >
-                視点 <span className="shortcut">(V)</span>
-              </button>
+        <div className="flex items-center justify-end gap-2">
+          <div className="hidden flex-wrap items-center justify-end gap-3 lg:flex">
+            <span className="text-[11pt] text-blue-400">✔ {saveStatus}</span>
+            {copyStatus && (
+              <span className="text-[11pt] text-[var(--td-text)]">{copyStatus}</span>
             )}
 
-            {!isReadOnly && (
-              <button
-                onClick={() => setShowLeft((v) => !v)}
-                className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
-                title="素材欄を表示／非表示"
-              >
-                素材 <span className="shortcut">(I)</span>
-              </button>
-            )}
+            <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
+              {!isReadOnly && (
+                <button
+                  onClick={changePerspective}
+                  className={topButtonClass}
+                  title="視点を変更"
+                >
+                  視点 <span className="shortcut">(V)</span>
+                </button>
+              )}
 
-            <button
-              onClick={() => setShowRight((v) => !v)}
-              className={`${topButtonClass} ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
-              title="メモ欄を表示／非表示"
-            >
-              メモ <span className="shortcut">(M)</span>
-            </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => setShowLeft((v) => !v)}
+                  className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                  title="素材欄を表示／非表示"
+                >
+                  素材 <span className="shortcut">(I)</span>
+                </button>
+              )}
 
-            {!isReadOnly && (
               <button
-                onClick={openOutputComposer}
-                className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
-                title="投稿文を作成します"
+                onClick={() => setShowRight((v) => !v)}
+                className={`${topButtonClass} ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                title="メモ欄を表示／非表示"
               >
-                投稿 <span className="shortcut">(P)</span>
-              </button>
-            )}
-
-            <div className="relative">
-              <button
-                onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
-                className={topButtonClass}
-                title="その他の機能"
-              >
-                ︙
+                メモ <span className="shortcut">(M)</span>
               </button>
 
-              {openTopMenu === "more" && (
-                <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
-                  <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {!isReadOnly && (
-                      <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
-                    )}
-                    <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
-                      {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
-                    </button>
-                  </div>
+              {!isReadOnly && (
+                <button
+                  onClick={openOutputComposer}
+                  className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
+                  title="投稿文を作成します"
+                >
+                  投稿 <span className="shortcut">(P)</span>
+                </button>
+              )}
+
+              <div className="relative">
+                <button
+                  onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
+                  className={topButtonClass}
+                  title="その他の機能"
+                >
+                  ︙
+                </button>
+
+                {openTopMenu === "more" && (
+                  <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {!isReadOnly && (
+                        <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
+                      )}
+                      <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
+                        {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
+                      </button>
+                    </div>
 
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
                     <p className="mb-2 text-[10pt] text-[var(--td-muted)]">リンク</p>
@@ -1565,15 +1749,12 @@ export default function Home(props: HomeProps) {
                       </button>
                     </div>
                   )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="text-[11pt] text-[var(--td-text)] lg:hidden">
-          ✔ {saveStatus}
-          {copyStatus ? ` / ${copyStatus}` : ""}
         </div>
       </header>
 

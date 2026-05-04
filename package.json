@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",
+    "gray-matter": "^4.0.3",
     "lz-string": "^1.5.0",
     "nanoid": "^3.3.12",
     "next": "16.2.4",

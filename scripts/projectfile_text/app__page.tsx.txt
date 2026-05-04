@@ -1119,8 +1119,8 @@ export default function Home(props: HomeProps) {
         </div>
       )}
 
-      <header className="flex min-h-[70px] flex-wrap items-center justify-between gap-3 border-b border-[var(--td-border)] px-6 py-3">
-        <div>
+      <header className="flex min-h-[70px] items-center border-b border-[var(--td-border)] px-6 py-3">
+        <div className="min-w-0 flex-1">
           <h1 className="text-[20px] font-bold leading-tight">
             <a
               href={THOUGHTDECK_HOME_URL}
@@ -1134,71 +1134,72 @@ export default function Home(props: HomeProps) {
           <p className="text-[11pt] text-[var(--td-muted)]">Think. Deck. Share.</p>
         </div>
 
-        <div className="hidden flex-wrap items-center justify-end gap-3 lg:flex">
-          <span className="text-[11pt] text-blue-400">✔ {saveStatus}</span>
-          {copyStatus && (
-            <span className="text-[11pt] text-[var(--td-text)]">{copyStatus}</span>
-          )}
-
-          <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
-            {!isReadOnly && (
-              <button
-                onClick={changePerspective}
-                className={topButtonClass}
-                title="視点を変更"
-              >
-                視点 <span className="shortcut">(V)</span>
-              </button>
+        <div className="flex items-center justify-end gap-2">
+          <div className="hidden flex-wrap items-center justify-end gap-3 lg:flex">
+            <span className="text-[11pt] text-blue-400">✔ {saveStatus}</span>
+            {copyStatus && (
+              <span className="text-[11pt] text-[var(--td-text)]">{copyStatus}</span>
             )}
 
-            {!isReadOnly && (
-              <button
-                onClick={() => setShowLeft((v) => !v)}
-                className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
-                title="素材欄を表示／非表示"
-              >
-                素材 <span className="shortcut">(I)</span>
-              </button>
-            )}
+            <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
+              {!isReadOnly && (
+                <button
+                  onClick={changePerspective}
+                  className={topButtonClass}
+                  title="視点を変更"
+                >
+                  視点 <span className="shortcut">(V)</span>
+                </button>
+              )}
 
-            <button
-              onClick={() => setShowRight((v) => !v)}
-              className={`${topButtonClass} ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
-              title="メモ欄を表示／非表示"
-            >
-              メモ <span className="shortcut">(M)</span>
-            </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => setShowLeft((v) => !v)}
+                  className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                  title="素材欄を表示／非表示"
+                >
+                  素材 <span className="shortcut">(I)</span>
+                </button>
+              )}
 
-            {!isReadOnly && (
               <button
-                onClick={openOutputComposer}
-                className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
-                title="投稿文を作成します"
+                onClick={() => setShowRight((v) => !v)}
+                className={`${topButtonClass} ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                title="メモ欄を表示／非表示"
               >
-                投稿 <span className="shortcut">(P)</span>
-              </button>
-            )}
-
-            <div className="relative">
-              <button
-                onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
-                className={topButtonClass}
-                title="その他の機能"
-              >
-                ︙
+                メモ <span className="shortcut">(M)</span>
               </button>
 
-              {openTopMenu === "more" && (
-                <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
-                  <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {!isReadOnly && (
-                      <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
-                    )}
-                    <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
-                      {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
-                    </button>
-                  </div>
+              {!isReadOnly && (
+                <button
+                  onClick={openOutputComposer}
+                  className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
+                  title="投稿文を作成します"
+                >
+                  投稿 <span className="shortcut">(P)</span>
+                </button>
+              )}
+
+              <div className="relative">
+                <button
+                  onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
+                  className={topButtonClass}
+                  title="その他の機能"
+                >
+                  ︙
+                </button>
+
+                {openTopMenu === "more" && (
+                  <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {!isReadOnly && (
+                        <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
+                      )}
+                      <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
+                        {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
+                      </button>
+                    </div>
 
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
                     <p className="mb-2 text-[10pt] text-[var(--td-muted)]">リンク</p>
@@ -1293,15 +1294,12 @@ export default function Home(props: HomeProps) {
                       </button>
                     </div>
                   )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="text-[11pt] text-[var(--td-text)] lg:hidden">
-          ✔ {saveStatus}
-          {copyStatus ? ` / ${copyStatus}` : ""}
         </div>
       </header>
 

@@ -12,6 +12,8 @@ app/
 │       └── page.tsx
 ├── globals.css
 ├── layout.tsx
+├── mydecks/
+│   └── page.tsx
 └── page.tsx
 
 lib/
