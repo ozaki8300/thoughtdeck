@@ -1,0 +1,1625 @@
+"use client";
+
+import type { Area, ThemeMode } from "../lib/deckTypes";
+import { AboutModal } from "../components/AboutModal";
+import { PDFViewer } from "../components/PDFViewer";
+import { QRModal } from "../components/QRModal";
+import { ShortcutHelp } from "../components/ShortcutHelp";
+import {
+  THOUGHTDECK_HOME_URL,
+  defaultQuickLinks,
+  getActiveAreaEntries,
+  getAreaPlaceholder,
+  getDynamicColumnClass,
+  nextThemeMode,
+  themeLabel,
+  buildRestoreUrl,
+  useDeckState,
+} from "../lib/useDeckState";
+import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckState";
+import { createDeck, updateDeck } from "../lib/deckService";
+
+import type { CSSProperties } from "react";
+
+import { use, useEffect, useRef, useState } from "react";
+
+function renderInline(text: string) {
+  const parts = text.split(/(==.*?==|=[^=].*?=|\*\*.*?\*\*)/g);
+
+  return parts.map((part, i) => {
+    if (part.startsWith("==") && part.endsWith("==")) {
+      return (
+        <mark
+          key={i}
+          className="rounded-[3px] bg-[var(--td-mark-bg)] px-[3px] text-[var(--td-text)]"
+        >
+          {part.slice(2, -2)}
+        </mark>
+      );
+    }
+
+    if (part.startsWith("=") && part.endsWith("=") && part.length > 2) {
+      return (
+        <mark
+          key={i}
+          className="rounded-[3px] bg-[var(--td-mark-bg)] px-[3px] text-[var(--td-text)]"
+        >
+          {part.slice(1, -1)}
+        </mark>
+      );
+    }
+
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-semibold text-[var(--td-accent)]">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function stripListMarker(line: string) {
+  return line.replace(/^\s*[-*+]\s+/, "");
+}
+
+function renderMarkdownBlocks(text: string, emptyText = "本文は素材欄に入力してください。") {
+  const sourceLines = text.split("\n");
+  const elements = [];
+  let i = 0;
+  let key = 0;
+
+  const nextKey = () => `md-${key++}`;
+
+  while (i < sourceLines.length) {
+    const line = sourceLines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      elements.push(<hr key={nextKey()} className="my-3 border-[var(--td-border)]" />);
+      i += 1;
+      continue;
+    }
+
+    const h3 = trimmed.match(/^###\s+(.+)$/);
+    if (h3) {
+      elements.push(
+        <h3 key={nextKey()} className="mt-3 text-[12pt] font-bold text-[var(--td-accent)]">
+          {renderInline(h3[1])}
+        </h3>,
+      );
+      i += 1;
+      continue;
+    }
+
+    const h2 = trimmed.match(/^##\s+(.+)$/);
+    if (h2) {
+      elements.push(
+        <h2 key={nextKey()} className="mt-4 text-[13pt] font-bold text-[var(--td-accent)]">
+          {renderInline(h2[1])}
+        </h2>,
+      );
+      i += 1;
+      continue;
+    }
+
+    const h1 = trimmed.match(/^#\s+(.+)$/);
+    if (h1) {
+      elements.push(
+        <h1 key={nextKey()} className="mt-4 text-[15pt] font-bold text-[var(--td-accent)]">
+          {renderInline(h1[1])}
+        </h1>,
+      );
+      i += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(trimmed)) {
+      const quoteLines = [];
+      while (i < sourceLines.length && /^>\s?/.test(sourceLines[i].trim())) {
+        quoteLines.push(sourceLines[i].trim().replace(/^>\s?/, ""));
+        i += 1;
+      }
+      elements.push(
+        <blockquote key={nextKey()} className="my-2 border-l-2 border-[var(--td-accent-border)] pl-3 text-[var(--td-text-soft)]">
+          {quoteLines.map((quote, idx) => (
+            <p key={idx}>{renderInline(quote)}</p>
+          ))}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const items = [];
+      while (i < sourceLines.length && /^\s*[-*+]\s+/.test(sourceLines[i])) {
+        items.push(stripListMarker(sourceLines[i]));
+        i += 1;
+      }
+      elements.push(
+        <ul key={nextKey()} className="my-1 list-disc space-y-0.5 pl-5">
+          {items.map((item, idx) => (
+            <li key={idx}>{renderInline(item)}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    const paragraph = [];
+    while (
+      i < sourceLines.length &&
+      sourceLines[i].trim() &&
+      !/^\s*[-*+]\s+/.test(sourceLines[i]) &&
+      !/^>\s?/.test(sourceLines[i].trim()) &&
+      !/^#{1,3}\s+/.test(sourceLines[i].trim()) &&
+      !/^---+$/.test(sourceLines[i].trim())
+    ) {
+      paragraph.push(sourceLines[i].trim());
+      i += 1;
+    }
+
+    elements.push(
+      <p key={nextKey()} className="whitespace-pre-wrap">
+        {renderInline(paragraph.join("\n"))}
+      </p>,
+    );
+  }
+
+  if (elements.length === 0) {
+    return <p className="text-[var(--td-muted)]">{emptyText}</p>;
+  }
+
+  return <div className="space-y-1 break-words">{elements}</div>;
+}
+
+type HomeProps = UseDeckStateProps & {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export default function Home(props: HomeProps) {
+  const [openCardIds, setOpenCardIds] = useState<string[]>([]);
+  const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
+  const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
+  const [openMobileMenu, setOpenMobileMenu] = useState(false);
+  const [openAbout, setOpenAbout] = useState(false);
+  const searchParams = use(props.searchParams);
+  const snapshotReadOnly = searchParams.ro === "1";
+  const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
+  const mergedProps = {
+    ...props,
+    readOnly: props.readOnly || isReadOnly,
+  };
+  const {
+    raw,
+    memo,
+    output,
+    starred,
+    saveStatus,
+    copyStatus,
+    setCopyStatus,
+    obsidianToast,
+    showQr,
+    setShowQr,
+    shareUrl,
+    setShareUrl,
+    longUrl,
+    setLongUrl,
+    qrError,
+    setQrError,
+    deckId,
+    setDeckId,
+    selectedCardId,
+    setSelectedCardId,
+    focusMode,
+    setFocusMode,
+    expandedEditor,
+    setExpandedEditor,
+    shortcutHint,
+    setShortcutHint,
+    perspective,
+    openOutputComposer,
+    baseCardClass,
+    selectedThoughtClass,
+    mutedQuestionClass,
+    changePerspective,
+    showLeft,
+    setShowLeft,
+    showRight,
+    setShowRight,
+    showShortcutHelp,
+    setShowShortcutHelp,
+    showTemplatePanel,
+    setShowTemplatePanel,
+    openTopMenu,
+    setOpenTopMenu,
+    topMenuRef,
+    memoRef,
+    themeMode,
+    setThemeMode,
+    customLinkLabel,
+    setCustomLinkLabel,
+    customLinkUrl,
+    setCustomLinkUrl,
+    templates,
+    selectedTemplateId,
+    setSelectedTemplateId,
+    templateInstruction,
+    setTemplateInstruction,
+    templateIncludeInput,
+    setTemplateIncludeInput,
+    templateIncludeMemo,
+    setTemplateIncludeMemo,
+    templateIncludeOutput,
+    setTemplateIncludeOutput,
+    newTemplateTitle,
+    setNewTemplateTitle,
+    newTemplateContent,
+    setNewTemplateContent,
+    leftWidth,
+    rightWidth,
+    setDraggingLeft,
+    setDraggingRight,
+    pdfInputRef,
+    pdfUrl,
+    pdfFileName,
+    isPdfOpen,
+    pdfSide,
+    setPdfSide,
+    pdfWidth,
+    pdfPage,
+    setPdfPage,
+    pdfWorkMode,
+    setPdfWorkMode,
+    draggingPdf,
+    setDraggingPdf,
+    title,
+    topSections,
+    bottomSections,
+    addedCards,
+    allQuickLinks,
+    addCustomLink,
+    removeCustomLink,
+    toggleMemoAndScroll,
+    handleResourceLinkClick,
+    addTemplate,
+    removeTemplate,
+    selectedTemplate,
+    cardBlocks,
+    setRawWithCloudDirty,
+    setMemoWithCloudDirty,
+    setOutputWithCloudDirty,
+    updatePdfWidthFromClientX,
+    openPdfPicker,
+    handlePdfFileChange,
+    hidePdf,
+    clearPdf,
+    togglePdf,
+    downloadMd,
+    saveToObsidian,
+    clearAll,
+    confirmLoadDemo,
+    insertTemplate,
+    toggleStar,
+    copyTemplateBundle,
+  } = useDeckState(mergedProps);
+
+  const createShare = async () => {
+    try {
+      let id = deckId;
+
+      if (!id) {
+        id = await createDeck({
+          title,
+          raw,
+          memo,
+          output,
+        });
+        setDeckId(id);
+      } else {
+        await updateDeck(id, {
+          title,
+          raw,
+          memo,
+          output,
+        });
+      }
+
+      const longUrl = buildRestoreUrl(
+        raw,
+        memo,
+        output,
+        addedCards,
+        starred,
+      );
+      const shareUrl = `${window.location.origin}/deck/${id}?ro=1`;
+      const copyUrl = `${longUrl}&ro=1`;
+
+      setShareUrl(shareUrl);
+      setLongUrl(copyUrl);
+      setQrError("");
+      setShowQr(true);
+
+      await navigator.clipboard.writeText(copyUrl);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setIsReadOnly(new URLSearchParams(window.location.search).get("ro") === "1");
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const openMemoEditor = () => {
+    setSelectedCardId("td-memo");
+    setLastActivePanel("td-memo");
+    setExpandedEditor("memo");
+  };
+
+  const openInputEditor = () => {
+    setSelectedCardId("td-input");
+    setLastActivePanel("td-input");
+    setExpandedEditor("input");
+  };
+
+  useEffect(() => {
+    if (isReadOnly) {
+      const timer = window.setTimeout(() => setMemoMode("preview"), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [isReadOnly]);
+
+  useEffect(() => {
+    const shown = localStorage.getItem("td_hint_shown");
+
+    if (!shown) {
+      setShortcutHint("I:素材 / M:メモ / 📚:ガイド");
+
+      const timer = window.setTimeout(() => {
+        setShortcutHint("");
+      }, 4000);
+
+      localStorage.setItem("td_hint_shown", "1");
+
+      return () => window.clearTimeout(timer);
+    }
+  }, [setShortcutHint]);
+
+  useEffect(() => {
+    if (expandedEditor === "input") {
+      inputRef.current?.focus();
+    }
+
+    if (expandedEditor === "memo") {
+      memoRefLocal.current?.focus();
+    }
+  }, [expandedEditor]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (isReadOnly) {
+        if (!["m", "d"].includes(key)) return;
+      }
+
+      const isTyping =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement;
+
+      if (isTyping) return;
+
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        setShowShortcutHelp(true);
+      }
+
+      if (key === "i") {
+        e.preventDefault();
+        setShowLeft((v) => !v);
+      }
+
+      if (key === "m") {
+        e.preventDefault();
+        setShowRight((v) => !v);
+      }
+
+      if (key === "p") {
+        e.preventDefault();
+        openOutputComposer();
+      }
+
+      if (key === "e") {
+        e.preventDefault();
+
+        if (expandedEditor === null) {
+          openInputEditor();
+        } else if (expandedEditor === "memo") {
+          openInputEditor();
+        } else {
+          openMemoEditor();
+        }
+      }
+
+      if (key === "f") {
+        e.preventDefault();
+        setFocusMode((v) => !v);
+      }
+
+      if (key === "s") {
+        e.preventDefault();
+        if (selectedCardId) {
+          toggleStar(selectedCardId);
+        }
+      }
+
+      if (key === "d") {
+        e.preventDefault();
+        togglePdf();
+      }
+
+      if (key === "q") {
+        e.preventDefault();
+        createShare();
+      }
+
+      if (key === "o") {
+        e.preventDefault();
+        saveToObsidian();
+      }
+
+      if (key === "t") {
+        e.preventDefault();
+        setShowTemplatePanel(true);
+      }
+
+      if (key === "v") {
+        e.preventDefault();
+        changePerspective();
+      }
+
+      if (key === "r") {
+        e.preventDefault();
+        if (showRight) {
+          setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"));
+        }
+      }
+
+      if (key === "x") {
+        e.preventDefault();
+        downloadMd();
+      }
+
+      if (key === "escape") {
+        setExpandedEditor(null);
+        setFocusMode(false);
+        setShowTemplatePanel(false);
+        setShowShortcutHelp(false);
+      }
+
+      if ((e.ctrlKey || e.metaKey) && key === "enter") {
+        setExpandedEditor(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedCardId,
+    expandedEditor,
+    lastActivePanel,
+    isReadOnly,
+    setShowLeft,
+    setShowRight,
+    openOutputComposer,
+    openMemoEditor,
+    openInputEditor,
+    setFocusMode,
+    toggleStar,
+    togglePdf,
+    createShare,
+    saveToObsidian,
+    setShowTemplatePanel,
+    changePerspective,
+    downloadMd,
+    setExpandedEditor,
+    setShowShortcutHelp,
+  ]);
+
+  const renderOneColumnSection = (section: OneColumnSection) => {
+    const isSelected = selectedCardId === section.id;
+
+    return (
+      <section
+        key={section.id}
+        onClick={() => setSelectedCardId(section.id)}
+        className={`cursor-pointer rounded-xl border p-4 transition ${
+          isSelected ? selectedThoughtClass : baseCardClass
+        }`}
+      >
+        <h3 className="mb-1 text-[12pt] font-bold text-[var(--td-accent)]">
+          {section.title}
+        </h3>
+        <div className="text-[11pt] leading-5 text-[var(--td-text)]">
+          {renderMarkdownBlocks(section.lines.join("\n"))}
+        </div>
+      </section>
+    );
+  };
+
+  const renderCard = (card: Card, isCenter = false) => {
+    const isSelected = selectedCardId === card.id;
+
+    return (
+      <div
+        key={card.id}
+        onClick={() => setSelectedCardId(card.id)}
+        className={`cursor-pointer rounded-xl border px-2 py-3 transition ${
+          isSelected
+            ? selectedThoughtClass
+            : baseCardClass
+        }`}
+      >
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <h3 className="w-full text-[12pt] font-bold text-[var(--td-accent)]">
+            {card.title}
+          </h3>
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleStar(card.id);
+            }}
+            className={`shrink-0 text-[11pt] ${
+              starred.includes(card.id)
+                ? "text-yellow-400"
+                : "text-[var(--td-muted)]"
+            } hover:text-yellow-300`}
+            title="重要マーク"
+          >
+            {starred.includes(card.id) ? "★" : "☆"}
+          </button>
+        </div>
+
+        <div className="text-[11pt] leading-5 text-[var(--td-text)]">
+          {renderMarkdownBlocks(card.lines.join("\n"))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCentralFocus = () => {
+    if (!focusMode) return null;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-[var(--td-overlay)] p-4 backdrop-blur-sm"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setFocusMode(false);
+        }}
+      >
+        <section className="mx-auto flex h-full w-full max-w-7xl flex-col rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-bg)] shadow-2xl">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--td-border)] px-5 py-4">
+            <div>
+              <p className="text-[10.5pt] text-[var(--td-muted)]">
+                フォーカス / F：開く / Esc：閉じる
+              </p>
+              <h2 className="text-[16pt] font-bold text-[var(--td-text)]">
+                {title}
+              </h2>
+            </div>
+            <button
+              onClick={() => setFocusMode(false)}
+              className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]"
+            >
+              閉じる
+            </button>
+          </div>
+
+          <div className="no-scrollbar flex-1 overflow-auto p-6">
+            <div className="mx-auto max-w-6xl">
+              {topSections.length > 0 && (
+                <div className="mb-6 space-y-4">
+                  {topSections.map(renderOneColumnSection)}
+                </div>
+              )}
+
+              <div>
+                {cardBlocks.map((block, index) => renderCardBlock(block, index))}
+              </div>
+
+              {bottomSections.length > 0 && (
+                <div className="mt-8 border-t border-[var(--td-border)] pt-5">
+                  <div className="mb-2 px-1 text-[10.5pt] text-[var(--td-muted)]">
+                    結論
+                  </div>
+                  <div className="space-y-4">
+                    {bottomSections.map(renderOneColumnSection)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderColumn = (items: Card[], area?: Area) => {
+    const isCenter = area === "center";
+
+    return (
+      <section className="min-h-12 space-y-3 rounded-xl transition">
+        {items.map((card) => renderCard(card, isCenter))}
+
+      </section>
+    );
+  };
+
+  const renderCardBlock = (
+    block: { visualGroup: number; left: Card[]; center: Card[]; right: Card[] },
+    index: number,
+  ) => {
+    const hasCards =
+      block.left.length > 0 || block.center.length > 0 || block.right.length > 0;
+
+    if (!hasCards) return null;
+
+    const activeAreas = getActiveAreaEntries(block);
+    const columnClass = getDynamicColumnClass(activeAreas.length);
+
+    return (
+      <div
+        key={block.visualGroup}
+        className={index === 0 ? "" : "mt-12 pt-2"}
+      >
+        <div className={`grid gap-4 ${columnClass} max-xl:grid-cols-1`}>
+          {activeAreas.map(([area, items]) => {
+            const placeholder = getAreaPlaceholder(perspective, area);
+
+            return (
+              <div key={area} className="space-y-2">
+                {placeholder && (
+                  <p className={`${mutedQuestionClass} px-1`}>{placeholder}</p>
+                )}
+                {renderColumn(items, area)}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderThoughtArea = () => (
+    <section className="no-scrollbar flex-1 overflow-auto p-4 max-lg:overflow-visible max-lg:p-4">
+      
+      <div className="mb-3 px-1 text-[10.5pt] text-[var(--td-muted)]">
+        ① 書く（素材）→ ② 並べる（カード）→ ③ 選ぶ（★）→ ④ 投稿する
+      </div>
+      <div className="mb-5 rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] p-5">
+        <p className="text-[11pt] text-[var(--td-muted)]">タイトル</p>
+        <h2 className="text-xl font-bold">{title}</h2>
+      </div>
+
+      {topSections.length > 0 && (
+        <div className="mb-5 space-y-4">
+          {topSections.map(renderOneColumnSection)}
+        </div>
+      )}
+
+      <div>{cardBlocks.map((block, index) => renderCardBlock(block, index))}</div>
+
+      {bottomSections.length > 0 && (
+        <div className="mt-5 border-t border-[var(--td-border)] pt-4">
+          <div className="mb-2 px-1 text-[10.5pt] text-[var(--td-muted)]">結論</div>
+          <div className="space-y-4">{bottomSections.map(renderOneColumnSection)}</div>
+        </div>
+      )}
+
+      {output.trim() && (
+        <div className="mt-8 border-t border-[var(--td-border)] pt-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10.5pt] text-[var(--td-muted)]">OUTPUT</p>
+              <h2 className="text-[13pt] font-bold text-[var(--td-text)]">投稿文</h2>
+            </div>
+            {!isReadOnly && (
+              <button onClick={openOutputComposer} className="rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]">
+                編集 <span className="shortcut">(E)</span>
+              </button>
+            )}
+          </div>
+          <section
+            onClick={() => setSelectedCardId("td-output")}
+            className={`cursor-pointer rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition ${
+              selectedCardId === "td-output"
+                ? selectedThoughtClass
+                : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+            }`}
+          >
+            {renderMarkdownBlocks(output)}
+          </section>
+        </div>
+      )}
+    </section>
+  );
+
+  const renderExpandedEditor = () => {
+    if (!expandedEditor) return null;
+
+    const isInput = expandedEditor === "input";
+    const isMemo = expandedEditor === "memo";
+
+    const toggleOpen = (id: string) => {
+      setOpenCardIds((prev: string[]) =>
+        prev.includes(id)
+          ? prev.filter((i) => i !== id)
+          : [...prev, id]
+      );
+    };
+
+    const value = isInput ? raw : isMemo ? memo : output;
+    const setValue = isInput
+      ? setRawWithCloudDirty
+      : isMemo
+      ? setMemoWithCloudDirty
+      : setOutputWithCloudDirty;
+
+    const placeholder = isInput
+      ? "思考の素材を書く（事実・気づき・仮説をそのまま書く）"
+      : isMemo
+      ? "後から気づいたこと・補足を書く"
+      : "★で選んだ視点を使い、自分の言葉で投稿を書く";
+
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center">
+        <div className="w-[92%] h-[92%] max-w-6xl rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] shadow-xl flex flex-col overflow-hidden">
+
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between border-b border-[var(--td-border)] px-5 py-3 shrink-0">
+            <div className="text-sm text-[var(--td-muted)]">
+              {isInput ? "素材" : isMemo ? "メモ" : "投稿（P）"}
+            </div>
+            <button
+              onClick={() => setExpandedEditor(null)}
+              className="text-sm text-[var(--td-muted)]"
+            >
+              閉じる（Esc）
+            </button>
+          </div>
+
+          {/* 本体 */}
+          <div className="flex flex-1 overflow-hidden">
+
+            {/* 左：★視点 */}
+            {!isInput && !isMemo && starred.length > 0 && (
+              <div className="w-56 shrink-0 border-r border-[var(--td-border)] p-4 overflow-y-auto noise-less-scroll">
+
+                <div className="text-[10pt] text-[var(--td-muted)] mb-3">
+                  ★視点
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {cardBlocks
+                    .flatMap(block => [...block.left, ...block.center, ...block.right])
+                    .filter(card => starred.includes(card.id))
+                    .map(card => {
+                      const isOpen = openCardIds.includes(card.id);
+
+                      return (
+                        <div
+                          key={card.id}
+                          onClick={() => toggleOpen(card.id)}
+                          className={`
+                            group
+                            border rounded px-3 py-2 cursor-pointer
+                            transition-all duration-150 ease-out
+                            hover:-translate-y-[1px] hover:shadow-sm
+                            ${isOpen
+                              ? "border-[var(--td-accent)] bg-[var(--td-accent)]/5 shadow-sm"
+                              : "border-blue-400/20 hover:border-[var(--td-accent)]/60"
+                            }
+                          `}
+                        >
+                          {/* タイトル */}
+                          <div className="text-[10pt] font-bold text-[var(--td-accent)] transition-all duration-150 group-hover:opacity-90">
+                            {card.title}
+                          </div>
+
+                          {/* 本文 */}
+                          {isOpen && (
+                            <div className="mt-2 text-[10pt] whitespace-pre-wrap leading-6 text-[var(--td-text-soft)]">
+                              {renderMarkdownBlocks(card.lines.join("\n"))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+              {/* 右：エディタ */}
+              <div className="flex-1 overflow-hidden flex flex-col">
+
+                {/* ガイド */}
+                {!isInput && !isMemo && (
+                  <div className="px-8 pt-6 text-[11pt] text-[var(--td-muted)] shrink-0">
+                    ★で視点を選び、自分の言葉でまとめる
+                  </div>
+                )}
+
+                {/* textarea */}
+                <textarea
+                  autoFocus
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  readOnly={isReadOnly}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setExpandedEditor(null);
+                    }
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                      event.preventDefault();
+                      setExpandedEditor(null);
+                    }
+                  }}
+                  placeholder={placeholder}
+                  className={`
+                    flex-1 min-h-0
+                    resize-none
+                    overflow-y-auto noise-less-scroll
+                    bg-[var(--td-editor)]
+                    px-8 py-8
+                    text-[var(--td-text)]
+                    outline-none
+                    ${isInput
+                      ? "font-mono text-[13pt] leading-7"
+                      : "text-[15pt] leading-9 tracking-[0.01em]"
+                    }
+                  `}
+                />
+
+              </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const renderTemplatePanel = () => {
+    if (!showTemplatePanel) return null;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-[var(--td-overlay)] p-4 backdrop-blur-sm"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setShowTemplatePanel(false);
+        }}
+      >
+        <section className="mx-auto flex h-full w-full max-w-5xl flex-col rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-bg)] shadow-2xl">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--td-border)] px-5 py-4">
+            <div>
+              <p className="text-[10.5pt] text-[var(--td-muted)]">思考整理 / Esc：閉じる</p>
+              <h2 className="text-[16pt] font-bold text-[var(--td-text)]">思考整理</h2>
+            </div>
+            <button onClick={() => setShowTemplatePanel(false)} className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-blue-500/50 hover:bg-blue-950/10 hover:text-[var(--td-text)]">閉じる</button>
+          </div>
+
+          <div className="no-scrollbar grid flex-1 grid-cols-[280px_1fr] gap-0 overflow-hidden max-lg:grid-cols-1">
+            <aside className="no-scrollbar overflow-auto border-r border-[var(--td-border)] p-5 max-lg:border-b max-lg:border-r-0">
+              <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考整理選択</p>
+              <div className="space-y-2">
+                <button onClick={() => setSelectedTemplateId("free")} className={`w-full rounded-xl border px-3 py-2 text-left text-[11pt] transition ${selectedTemplateId === "free" ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : "border-[var(--td-border)] bg-[var(--td-surface-soft)] text-[var(--td-text-soft)] hover:border-[var(--td-border-strong)]"}`}>なし（自由）</button>
+                {templates.map((template) => (
+                  <div key={template.id} className="flex items-center gap-2">
+                    <button onClick={() => setSelectedTemplateId(template.id)} className={`min-w-0 flex-1 rounded-xl border px-3 py-2 text-left text-[11pt] transition ${selectedTemplateId === template.id ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : "border-[var(--td-border)] bg-[var(--td-surface-soft)] text-[var(--td-text-soft)] hover:border-[var(--td-border-strong)]"}`}><span className="block truncate">{template.title}</span></button>
+                    <button onClick={() => removeTemplate(template.id)} className="rounded-lg border border-[var(--td-border)] px-2 py-2 text-[10pt] text-[var(--td-muted)] hover:border-red-800 hover:text-red-400" title="削除">×</button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 border-t border-[var(--td-border)] pt-5">
+                <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考整理追加</p>
+                <input value={newTemplateTitle} onChange={(event) => setNewTemplateTitle(event.target.value)} placeholder="タイトル" className="mb-2 w-full rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] text-[var(--td-text)] outline-none focus:border-blue-500/50" />
+                <textarea value={newTemplateContent} onChange={(event) => setNewTemplateContent(event.target.value)} readOnly={isReadOnly} placeholder="思考整理本文" className="mb-2 min-h-[280px] w-full resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] leading-6 text-[var(--td-text)] outline-none focus:border-blue-500/50" />
+                <button onClick={addTemplate} className={`${topButtonClass} w-full`}>追加</button>
+              </div>
+            </aside>
+
+            <div className="no-scrollbar overflow-auto p-6">
+              <div className="space-y-5">
+                <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+                  <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">選択中思考整理</h3>
+                  {selectedTemplate ? <pre className="no-scrollbar max-h-56 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-4 text-[10.5pt] leading-6 text-[var(--td-text-soft)]">{selectedTemplate.content}</pre> : <p className="rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-4 text-[11pt] text-[var(--td-muted)]">思考整理なし。自由記入欄とコピー対象だけで使えます。</p>}
+                </section>
+
+                <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+                  <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">自由記入欄</h3>
+                  <textarea value={templateInstruction} onChange={(event) => setTemplateInstruction(event.target.value)} readOnly={isReadOnly} placeholder="自由入力" className="h-32 w-full resize-y rounded-xl placeholder:text-neutral-600 border border-[var(--td-border)] bg-[var(--td-bg)] p-4 text-[11pt] leading-7 text-[var(--td-text)] outline-none focus:border-blue-500/50" />
+                </section>
+
+                <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
+                  <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">コピー対象</h3>
+                  <div className="flex flex-wrap gap-4 text-[11pt] text-[var(--td-text-soft)]">
+                    <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={templateIncludeInput} onChange={(event) => setTemplateIncludeInput(event.target.checked)} />素材</label>
+                    <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={templateIncludeMemo} onChange={(event) => setTemplateIncludeMemo(event.target.checked)} />メモ</label>
+                    <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={templateIncludeOutput} onChange={(event) => setTemplateIncludeOutput(event.target.checked)} />投稿文</label>
+                  </div>
+                  <button onClick={copyTemplateBundle} className="mt-5 rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-[11pt] text-[var(--td-accent)] transition hover:bg-[var(--td-accent-bg)]">コピー</button>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const topButtonClass =
+    "rounded-lg border border-[var(--td-border-strong)] px-3 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]";
+  const insertButtonClass =
+    "rounded-lg border border-[var(--td-border-strong)] px-3 py-2 text-[11pt] text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]";
+  const panelButtonClass =
+    "rounded-lg border border-[var(--td-border-strong)] px-3 py-1.5 text-[11pt] text-[var(--td-text-soft)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]";
+
+  return (
+    <main data-theme={themeMode} className="td-app-enter min-h-screen bg-[var(--td-bg)] text-[var(--td-text)] lg:h-screen lg:overflow-hidden">
+      <div aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-[90] h-[2px] w-full overflow-hidden">
+        <div className="td-startup-scan h-full w-[34vw] rounded-full bg-gradient-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_18px_rgba(96,165,250,0.9)]" />
+      </div>
+      {renderExpandedEditor()}
+      {renderCentralFocus()}
+      <ShortcutHelp
+        show={showShortcutHelp}
+        onClose={() => setShowShortcutHelp(false)}
+        confirmLoadDemo={confirmLoadDemo}
+      />
+      {renderTemplatePanel()}
+      <style jsx global>{`
+        main[data-theme="light"] {
+          --td-bg: #f8fafc;
+          --td-panel: #ffffff;
+          --td-surface: #f1f5f9;
+          --td-surface-soft: rgba(241, 245, 249, 0.82);
+          --td-editor: #ffffff;
+          --td-text: #111827;
+          --td-text-soft: #374151;
+          --td-muted: #6b7280;
+          --td-border: rgba(17, 24, 39, 0.13);
+          --td-border-strong: rgba(17, 24, 39, 0.22);
+          --td-hover: rgba(37, 99, 235, 0.08);
+          --td-overlay: rgba(15, 23, 42, 0.32);
+          --td-card-bg: rgba(255, 255, 255, 0.78);
+          --td-card-border: rgba(17, 24, 39, 0.13);
+          --td-card-border-hover: rgba(37, 99, 235, 0.36);
+          --td-accent: #2563eb;
+          --td-accent-bg: rgba(37, 99, 235, 0.09);
+          --td-accent-border: rgba(37, 99, 235, 0.42);
+          --td-accent-shadow: rgba(37, 99, 235, 0.45);
+          --td-mark-bg: rgba(37, 99, 235, 0.14);
+        }
+        main[data-theme="dark"] {
+          --td-bg: #0f172a;
+          --td-panel: #111827;
+          --td-surface: #162033;
+          --td-surface-soft: rgba(22, 32, 51, 0.74);
+          --td-editor: #111827;
+          --td-text: #e5e7eb;
+          --td-text-soft: #cbd5e1;
+          --td-muted: #94a3b8;
+          --td-border: rgba(148, 163, 184, 0.18);
+          --td-border-strong: rgba(148, 163, 184, 0.30);
+          --td-hover: rgba(37, 99, 235, 0.12);
+          --td-overlay: rgba(15, 23, 42, 0.78);
+          --td-card-bg: rgba(17, 24, 39, 0.72);
+          --td-card-border: rgba(148, 163, 184, 0.18);
+          --td-card-border-hover: rgba(96, 165, 250, 0.38);
+          --td-accent: #60a5fa;
+          --td-accent-bg: rgba(37, 99, 235, 0.14);
+          --td-accent-border: rgba(96, 165, 250, 0.46);
+          --td-accent-shadow: rgba(96, 165, 250, 0.48);
+          --td-mark-bg: rgba(37, 99, 235, 0.24);
+        }
+        main[data-theme="auto"] {
+          --td-bg: #f8fafc;
+          --td-panel: #ffffff;
+          --td-surface: #f1f5f9;
+          --td-surface-soft: rgba(241, 245, 249, 0.82);
+          --td-editor: #ffffff;
+          --td-text: #111827;
+          --td-text-soft: #374151;
+          --td-muted: #6b7280;
+          --td-border: rgba(17, 24, 39, 0.13);
+          --td-border-strong: rgba(17, 24, 39, 0.22);
+          --td-hover: rgba(37, 99, 235, 0.08);
+          --td-overlay: rgba(15, 23, 42, 0.32);
+          --td-card-bg: rgba(255, 255, 255, 0.78);
+          --td-card-border: rgba(17, 24, 39, 0.13);
+          --td-card-border-hover: rgba(37, 99, 235, 0.36);
+          --td-accent: #2563eb;
+          --td-accent-bg: rgba(37, 99, 235, 0.09);
+          --td-accent-border: rgba(37, 99, 235, 0.42);
+          --td-accent-shadow: rgba(37, 99, 235, 0.45);
+          --td-mark-bg: rgba(37, 99, 235, 0.14);
+        }
+        @media (prefers-color-scheme: dark) {
+          main[data-theme="auto"] {
+            --td-bg: #0f172a;
+            --td-panel: #111827;
+            --td-surface: #162033;
+            --td-surface-soft: rgba(22, 32, 51, 0.74);
+            --td-editor: #111827;
+            --td-text: #e5e7eb;
+            --td-text-soft: #cbd5e1;
+            --td-muted: #94a3b8;
+            --td-border: rgba(148, 163, 184, 0.18);
+            --td-border-strong: rgba(148, 163, 184, 0.30);
+            --td-hover: rgba(37, 99, 235, 0.12);
+            --td-overlay: rgba(15, 23, 42, 0.78);
+            --td-card-bg: rgba(17, 24, 39, 0.72);
+            --td-card-border: rgba(148, 163, 184, 0.18);
+            --td-card-border-hover: rgba(96, 165, 250, 0.38);
+            --td-accent: #60a5fa;
+            --td-accent-bg: rgba(37, 99, 235, 0.14);
+            --td-accent-border: rgba(96, 165, 250, 0.46);
+            --td-accent-shadow: rgba(96, 165, 250, 0.48);
+            --td-mark-bg: rgba(37, 99, 235, 0.24);
+          }
+        }
+        @keyframes td-startup-scan {
+          0% {
+            transform: translateX(-40vw);
+            opacity: 0;
+          }
+          12% {
+            opacity: 1;
+          }
+          78% {
+            opacity: 0.9;
+          }
+          100% {
+            transform: translateX(120vw);
+            opacity: 0;
+          }
+        }
+        .td-startup-scan {
+          animation: td-startup-scan 1.15s ease-out 1 both;
+        }
+        @keyframes td-app-enter {
+          0% {
+            opacity: 0;
+            transform: translateY(6px);
+            filter: blur(2px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+        }
+        .td-app-enter {
+          animation: td-app-enter 0.42s ease-out 1 both;
+        }
+        textarea, input {
+          background: var(--td-editor) !important;
+          color: var(--td-text) !important;
+        }
+        textarea::placeholder, input::placeholder {
+          color: var(--td-muted) !important;
+        }
+
+        .no-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+
+        /* ↓ここから追加 */
+
+        .noise-less-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+        }
+
+        .noise-less-scroll:hover {
+          scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+
+        .noise-less-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .noise-less-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .noise-less-scroll::-webkit-scrollbar-thumb {
+          background: transparent;
+          border-radius: 4px;
+          transition: background 0.2s;
+        }
+
+        .noise-less-scroll:hover::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.2);
+        }
+
+        .noise-less-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.35);
+        }
+      `}</style>
+
+      {obsidianToast && (
+        <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] px-4 py-2 text-[11pt] text-[var(--td-text-soft)] shadow-lg">
+          {obsidianToast}
+        </div>
+      )}
+
+      {shortcutHint && (
+        <div className="fixed left-1/2 top-16 z-[60] -translate-x-1/2 rounded-xl border border-blue-500/40 bg-blue-950/40 px-4 py-2 text-[11pt] text-blue-100 shadow-lg">
+          {shortcutHint}
+        </div>
+      )}
+
+      <header className="flex min-h-[70px] items-center border-b border-[var(--td-border)] px-6 py-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[20px] font-bold leading-tight">
+            <a
+              href={THOUGHTDECK_HOME_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[var(--td-text)] no-underline transition-colors hover:text-[var(--td-text-soft)]"
+            >
+              ThoughtDeck
+            </a>
+          </h1>
+          <p className="text-[11pt] text-[var(--td-muted)]">Think. Deck. Share.</p>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <div className="hidden flex-wrap items-center justify-end gap-3 lg:flex">
+            <span className="text-[11pt] text-blue-400">✔ {saveStatus}</span>
+            {copyStatus && (
+              <span className="text-[11pt] text-[var(--td-text)]">{copyStatus}</span>
+            )}
+
+            <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
+              {!isReadOnly && (
+                <button
+                  onClick={changePerspective}
+                  className={topButtonClass}
+                  title="視点を変更"
+                >
+                  視点 <span className="shortcut">(V)</span>
+                </button>
+              )}
+
+              {!isReadOnly && (
+                <button
+                  onClick={() => setShowLeft((v) => !v)}
+                  className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                  title="素材欄を表示／非表示"
+                >
+                  素材 <span className="shortcut">(I)</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => setShowRight((v) => !v)}
+                className={`${topButtonClass} ${showRight ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                title="メモ欄を表示／非表示"
+              >
+                メモ <span className="shortcut">(M)</span>
+              </button>
+
+              {!isReadOnly && (
+                <button
+                  onClick={openOutputComposer}
+                  className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
+                  title="投稿文を作成します"
+                >
+                  投稿 <span className="shortcut">(P)</span>
+                </button>
+              )}
+
+              <div className="relative">
+                <button
+                  onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
+                  className={topButtonClass}
+                  title="その他の機能"
+                >
+                  ︙
+                </button>
+
+                {openTopMenu === "more" && (
+                  <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {!isReadOnly && (
+                        <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
+                      )}
+                      <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
+                        {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
+                      </button>
+                    </div>
+
+                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">リンク</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {allQuickLinks.map((link, index) => {
+                        const isCustom = index >= defaultQuickLinks.length;
+                        return (
+                          <div key={`${link.label}-${link.url}-${index}`} className="flex min-w-0 items-center gap-1">
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${topButtonClass} min-w-0 flex-1 truncate text-center no-underline`}
+                              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                              onClick={(event) => handleResourceLinkClick(event, link.url)}
+                            >
+                              {link.label}
+                            </a>
+                            {isCustom && (
+                              <button
+                                onClick={() => removeCustomLink(index - defaultQuickLinks.length)}
+                                className="rounded-lg border border-[var(--td-border)] px-2 py-2 text-[10pt] text-[var(--td-muted)] hover:border-red-800 hover:text-red-400"
+                                title="削除"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
+                      <input
+                        value={customLinkLabel}
+                        onChange={(event) => setCustomLinkLabel(event.target.value)}
+                        placeholder="表示名"
+                        className="min-w-0 rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] text-[var(--td-text)] outline-none focus:border-blue-500/50"
+                      />
+                      <input
+                        value={customLinkUrl}
+                        onChange={(event) => setCustomLinkUrl(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") addCustomLink();
+                        }}
+                        placeholder="https://..."
+                        className="min-w-0 rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] text-[var(--td-text)] outline-none focus:border-blue-500/50"
+                      />
+                      <button onClick={addCustomLink} className={topButtonClass}>追加</button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">テーマ</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["auto", "light", "dark"] as ThemeMode[]).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => { setThemeMode(mode); setOpenTopMenu(null); }}
+                          className={`${topButtonClass} ${themeMode === mode ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                        >
+                          {themeLabel(mode)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">保存系</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {!isReadOnly && (
+                        <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
+                      )}
+                      {!isReadOnly && (
+                        <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
+                      )}
+                      {!isReadOnly && (
+                        <button onClick={() => { createShare(); setOpenTopMenu(null); }} disabled={isReadOnly} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isReadOnly && (
+                    <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                      <p className="mb-2 text-[10pt] text-[var(--td-muted)]">危険操作</p>
+                      <button
+                        onClick={() => {
+                          if (isReadOnly) return;
+                          clearAll();
+                          setOpenTopMenu(null);
+                        }}
+                        disabled={isReadOnly}
+                        className="w-full rounded-lg border border-red-800 px-3 py-2 text-[11pt] text-red-400 hover:bg-red-950/40"
+                      >
+                        新規作成
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">その他</p>
+                    <button
+                      onClick={() => {
+                        setOpenAbout(true);
+                        setOpenTopMenu(null);
+                      }}
+                      className={`${topButtonClass} w-full`}
+                    >
+                      About
+                    </button>
+                  </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </header>
+
+      <QRModal
+        isOpen={showQr}
+        title={title}
+        shareUrl={shareUrl}
+        longUrl={longUrl}
+        qrError={qrError}
+        onClose={() => setShowQr(false)}
+        onCopyUrl={() => setCopyStatus("URLをコピーしました")}
+      />
+      <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
+
+
+      <div className="flex h-[calc(100vh-70px)] overflow-hidden max-lg:h-auto max-lg:flex-col max-lg:overflow-visible">
+        <PDFViewer
+          pdfInputRef={pdfInputRef}
+          pdfUrl={pdfUrl}
+          pdfFileName={pdfFileName}
+          isPdfOpen={isPdfOpen}
+          pdfSide={pdfSide}
+          pdfWidth={pdfWidth}
+          pdfPage={pdfPage}
+          pdfWorkMode={pdfWorkMode}
+          draggingPdf={draggingPdf}
+          raw={raw}
+          memo={memo}
+          output={output}
+          panelButtonClass={panelButtonClass}
+          onPdfFileChange={handlePdfFileChange}
+          onPdfDragMove={updatePdfWidthFromClientX}
+          onStopPdfDrag={() => setDraggingPdf(false)}
+          onStartPdfDrag={() => setDraggingPdf(true)}
+          onPdfPageChange={setPdfPage}
+          onPdfSideChange={setPdfSide}
+          onPdfWorkModeChange={setPdfWorkMode}
+          onRawChange={isReadOnly ? () => undefined : setRawWithCloudDirty}
+          onMemoChange={isReadOnly ? () => undefined : setMemoWithCloudDirty}
+          onOutputChange={isReadOnly ? () => undefined : setOutputWithCloudDirty}
+          onHidePdf={hidePdf}
+          onOpenPdfPicker={openPdfPicker}
+          onClearPdf={clearPdf}
+          renderThoughtArea={renderThoughtArea}
+        >
+          <>
+            {!isReadOnly && showLeft && (
+              <>
+                <aside
+                  className="no-scrollbar w-full shrink-0 overflow-auto border-r border-[var(--td-border)] p-5 max-lg:border-b max-lg:border-r-0 lg:w-[var(--left-width)]"
+                  style={{ "--left-width": `${leftWidth}px` } as CSSProperties}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-[13pt] font-bold text-[var(--td-text)]">素材</h2>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowShortcutHelp(true);
+                        }}
+                        className="text-[12pt] cursor-help"
+                        title="ガイドを開く"
+                      >
+                         📚
+                      </button>
+                      <button onClick={openInputEditor} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
+                    </div>
+                  </div>
+
+                  {!isReadOnly && (
+                    <div className="mb-3 grid grid-cols-5 gap-2">
+                      <button onClick={() => insertTemplate("top")} disabled={isReadOnly} className={insertButtonClass} title="上部1カラムを追加">＋上</button>
+                      <button onClick={() => insertTemplate("left")} disabled={isReadOnly} className={insertButtonClass} title="左カードを追加">＋左</button>
+                      <button onClick={() => insertTemplate("center")} disabled={isReadOnly} className={insertButtonClass} title="中央カードを追加">＋中</button>
+                      <button onClick={() => insertTemplate("right")} disabled={isReadOnly} className={insertButtonClass} title="右カードを追加">＋右</button>
+                      <button onClick={() => insertTemplate("bottom")} disabled={isReadOnly} className={insertButtonClass} title="下部1カラムを追加">＋下</button>
+                    </div>
+                  )}
+
+                  <textarea
+                    ref={inputRef}
+                    value={raw}
+                    onChange={(e) => setRawWithCloudDirty(e.target.value)}
+                    readOnly={isReadOnly}
+                    onFocus={() => {
+                      setSelectedCardId("td-input");
+                      setLastActivePanel("td-input");
+                    }}
+                    placeholder="思考の素材を書く（授業メモ・気づき・仮説など）"
+                    className="no-scrollbar h-[calc(100vh-205px)] w-full resize-none rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[42vh]"
+                  />
+                </aside>
+                <button
+                  onClick={() => setShowLeft(false)}
+                  className="hidden w-9 shrink-0 border-r border-[var(--td-border)] bg-[var(--td-panel)] text-[12pt] text-[var(--td-text)] transition hover:bg-[var(--td-hover)] lg:block"
+                  title="素材を閉じる"
+                >
+                  ◀
+                </button>
+                <div onMouseDown={() => setDraggingLeft(true)} className="w-1 cursor-col-resize bg-[var(--td-border)] hover:bg-neutral-500 max-lg:hidden" />
+              </>
+            )}
+
+            {!isReadOnly && !showLeft && (
+              <button onClick={() => setShowLeft(true)} className="hidden w-9 shrink-0 border-r border-[var(--td-border)] bg-[var(--td-panel)] text-[11pt] text-[var(--td-text)] hover:bg-[var(--td-hover)] lg:block" title="素材を開く">▶</button>
+            )}
+
+            {renderThoughtArea()}
+
+            {!showRight && (
+              <button onClick={() => setShowRight(true)} className="hidden w-9 shrink-0 border-l border-[var(--td-border)] bg-[var(--td-panel)] text-[11pt] text-[var(--td-text)] hover:bg-[var(--td-hover)] lg:block" title="Memoを開く">◀</button>
+            )}
+
+            {showRight && (
+              <>
+                <div onMouseDown={() => setDraggingRight(true)} className="w-1 cursor-col-resize bg-[var(--td-border)] hover:bg-neutral-500 max-lg:hidden" />
+                <button
+                  onClick={() => setShowRight(false)}
+                  className="hidden w-9 shrink-0 border-l border-[var(--td-border)] bg-[var(--td-panel)] text-[12pt] text-[var(--td-text)] transition hover:bg-[var(--td-hover)] lg:block"
+                  title="メモを閉じる"
+                >
+                  ▶
+                </button>
+                <aside
+                  ref={memoRef}
+                  className="no-scrollbar w-full shrink-0 overflow-auto border-l border-[var(--td-border)] p-5 max-lg:border-l-0 max-lg:border-t lg:w-[var(--right-width)]"
+                  style={{ "--right-width": `${rightWidth}px` } as CSSProperties}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-[13pt] font-bold text-[var(--td-text)]">メモ</h2>
+                    <div className="flex items-center gap-2">
+                      {!isReadOnly && (
+                        <button onClick={() => setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"))} className={panelButtonClass}>表示切替 <span className="shortcut">(R)</span></button>
+                      )}
+                    </div>
+                  </div>
+                  {memoMode === "edit" ? (
+                    <textarea
+                      ref={memoRefLocal}
+                      value={memo}
+                      onChange={(event) => setMemoWithCloudDirty(event.target.value)}
+                      readOnly={isReadOnly}
+                      onFocus={() => {
+                        setSelectedCardId("td-memo");
+                        setLastActivePanel("td-memo");
+                      }}
+                      placeholder="授業中の気づき・違和感・発言メモを書く"
+                      className={`no-scrollbar h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:h-[34vh] ${
+                        selectedCardId === "td-memo"
+                          ? selectedThoughtClass
+                          : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+                      }`}
+                    />
+                  ) : (
+                    <section
+                      onClick={() => {
+                        setSelectedCardId("td-memo");
+                        setLastActivePanel("td-memo");
+                        if (isReadOnly) return;
+                        setMemoMode("edit");
+                      }}
+                      className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[34vh] ${
+                        selectedCardId === "td-memo"
+                          ? selectedThoughtClass
+                          : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+                      }`}
+                    >
+                      {renderMarkdownBlocks(memo, "右上の表示切替で編集できます")}
+                    </section>
+                  )}
+                  <p className="mt-2 text-right text-[11pt] text-[var(--td-muted)]">文字数：{memo.length}</p>
+                </aside>
+              </>
+            )}
+          </>
+        </PDFViewer>
+      </div>
+
+      <footer className="sticky bottom-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 lg:hidden">
+        {openMobileMenu && (
+          <div className="absolute bottom-full right-2 mb-2 flex w-44 flex-col gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-2 shadow-2xl">
+            <button
+              onClick={() => {
+                saveToObsidian();
+                setOpenMobileMenu(false);
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              Obsidian保存
+            </button>
+            <button
+              onClick={() => {
+                setThemeMode((mode) => nextThemeMode(mode));
+                setOpenMobileMenu(false);
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              テーマ切替
+            </button>
+            <button
+              onClick={() => {
+                setOpenAbout(true);
+                setOpenMobileMenu(false);
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              About
+            </button>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={createShare}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            共有
+          </button>
+
+          <button
+            onClick={() => {
+              const willCloseMemo = showRight;
+              toggleMemoAndScroll();
+              if (willCloseMemo) {
+                window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
+              }
+            }}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            メモ
+          </button>
+
+          <button
+            onClick={downloadMd}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            保存
+          </button>
+
+          <button
+            onClick={() => setOpenMobileMenu((value) => !value)}
+            className={`${topButtonClass} flex-1 text-center`}
+          >
+            ︙
+          </button>
+        </div>
+      </footer>
+    </main>
+  );
+}

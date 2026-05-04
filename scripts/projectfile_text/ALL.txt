@@ -691,11 +691,61 @@ FILE: app/page.tsx
 
 "use client";
 
-import type { Area, ThemeMode } from "../lib/deckTypes";
-import { AboutModal } from "../components/AboutModal";
-import { PDFViewer } from "../components/PDFViewer";
-import { QRModal } from "../components/QRModal";
-import { ShortcutHelp } from "../components/ShortcutHelp";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+export default function Home() {
+  const router = useRouter();
+  const [hasDeck, setHasDeck] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("thoughtdeck:mydecks:v1");
+      setHasDeck(!!saved);
+    } catch {
+      setHasDeck(false);
+    }
+  }, []);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-black text-blue-100">
+      <div className="flex flex-col items-center gap-6">
+
+        {/* 新規思考 */}
+        <button
+          onClick={() => router.push("/thoughtdeck")}
+          className="rounded-lg border border-blue-400/70 px-6 py-3 hover:bg-blue-500/20 transition"
+        >
+          ＋ 新しく思考する
+        </button>
+
+        {/* MyDeck（データある時だけ） */}
+        {hasDeck && (
+          <button
+            onClick={() => router.push("/mydecks")}
+            className="rounded-lg border border-blue-400/70 px-6 py-3 hover:bg-blue-500/20 transition"
+          >
+            MyDeck
+          </button>
+        )}
+
+      </div>
+    </main>
+  );
+}
+
+====================
+FILE: app/thoughtdeck/page.tsx
+====================
+
+"use client";
+
+import type { Area, ThemeMode } from "../../lib/deckTypes";
+import { AboutModal } from "../../components/AboutModal";
+import { PDFViewer } from "../../components/PDFViewer";
+import { QRModal } from "../../components/QRModal";
+import { ShortcutHelp } from "../../components/ShortcutHelp";
+
 import {
   THOUGHTDECK_HOME_URL,
   defaultQuickLinks,
@@ -706,10 +756,10 @@ import {
   themeLabel,
   buildRestoreUrl,
   useDeckState,
-} from "../lib/useDeckState";
-import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckState";
-import { createDeck, updateDeck } from "../lib/deckService";
-import { useRouter } from "next/navigation";
+} from "../../lib/useDeckState";
+
+import type { Card, OneColumnSection, UseDeckStateProps } from "../../lib/useDeckState";
+import { createDeck, updateDeck } from "../../lib/deckService";
 
 import type { CSSProperties } from "react";
 
@@ -876,10 +926,7 @@ type HomeProps = UseDeckStateProps & {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-const QR_HISTORY_STORAGE_KEY = "thoughtdeck:qr-history:v1";
-
 export default function Home(props: HomeProps) {
-  const router = useRouter();
   const [openCardIds, setOpenCardIds] = useState<string[]>([]);
   const [memoMode, setMemoMode] = useState<"edit" | "preview">("edit");
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
@@ -1038,24 +1085,6 @@ export default function Home(props: HomeProps) {
       );
       const shareUrl = `${window.location.origin}/deck/${id}?ro=1`;
       const copyUrl = `${longUrl}&ro=1`;
-      const qrHistoryItem = {
-        id,
-        created_at: new Date().toISOString(),
-        title,
-        thoughtdeck_url: shareUrl,
-      };
-
-      try {
-        const saved = localStorage.getItem(QR_HISTORY_STORAGE_KEY);
-        const history = saved ? JSON.parse(saved) : [];
-        const nextHistory = [
-          qrHistoryItem,
-          ...history.filter((item: { id?: string }) => item.id !== id),
-        ].slice(0, 20);
-        localStorage.setItem(QR_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
-      } catch {
-        localStorage.setItem(QR_HISTORY_STORAGE_KEY, JSON.stringify([qrHistoryItem]));
-      }
 
       setShareUrl(shareUrl);
       setLongUrl(copyUrl);
@@ -1912,13 +1941,6 @@ export default function Home(props: HomeProps) {
             )}
 
             <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
-              <button
-                onClick={() => router.push("/mydecks")}
-                className={topButtonClass}
-              >
-                MyDecks
-              </button>
-
               {!isReadOnly && (
                 <button
                   onClick={changePerspective}

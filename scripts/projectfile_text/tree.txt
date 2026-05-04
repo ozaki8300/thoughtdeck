@@ -14,7 +14,9 @@ app/
 ├── layout.tsx
 ├── mydecks/
 │   └── page.tsx
-└── page.tsx
+├── page.tsx
+└── thoughtdeck/
+    └── page.tsx
 
 lib/
 ├── buildThoughtDeckMd.ts
