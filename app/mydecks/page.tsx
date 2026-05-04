@@ -1,399 +1,168 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { encodeDeck } from "../../lib/useDeckState";
+import { useEffect, useState } from "react";
+import matter from "gray-matter";
 
 type Deck = {
   title: string;
+  summary: string;
   created_at: string;
   thoughtdeck_url: string;
-  raw: string;
-  memo: string;
-  output: string;
-  star: number;
-  trigger: string;
+  is_starred?: boolean;
+  raw?: string;
 };
 
-type QrHistoryItem = {
-  id: string;
-  created_at: string;
-  title: string;
-  thoughtdeck_url: string;
-};
+const STORAGE_KEY = "mydecks:v1";
 
-const STORAGE_KEY = "thoughtdeck:mydecks:v1";
-const QR_HISTORY_STORAGE_KEY = "thoughtdeck:qr-history:v1";
-
-function loadSavedDecks() {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved
-      ? (JSON.parse(saved) as Deck[]).map((deck) => ({
-          ...deck,
-          star: deck.star ?? 0,
-          trigger: deck.trigger ?? "",
-        }))
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadQrHistory() {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const saved = localStorage.getItem(QR_HISTORY_STORAGE_KEY);
-    return saved ? (JSON.parse(saved) as QrHistoryItem[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function readFrontmatter(text: string) {
-  const match = text.match(/^---\n([\s\S]*?)\n---/);
-  return match?.[1] ?? "";
-}
-
-function unquoteYaml(value: string) {
-  const trimmed = value.trim();
-
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-  }
-
-  return trimmed;
-}
-
-function getYamlValue(yaml: string, key: string) {
-  const match = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
-  return match ? unquoteYaml(match[1]) : "";
-}
-
-function getYamlBlock(yaml: string, key: "raw" | "memo" | "output") {
-  const match = yaml.match(
-    new RegExp(`^  ${key}: \\|\\n([\\s\\S]*?)(?=\\n  \\w+: \\||\\n\\w|$)`, "m"),
-  );
-
-  if (!match) return "";
-
-  return match[1]
-    .split("\n")
-    .map((line) => line.replace(/^    /, ""))
-    .join("\n")
-    .trimEnd();
-}
-
-function getBodySection(text: string, label: string) {
-  const match = text.match(
-    new RegExp(`^## .*${label}\\n([\\s\\S]*?)(?=\\n---\\n\\n## |\\n---\\s*$|$)`, "m"),
-  );
-  const value = match?.[1]?.trim() ?? "";
-  return value === "_(empty)_" ? "" : value;
-}
-
-function getTitleFromRaw(raw: string) {
-  const line = raw
-    .split("\n")
-    .find((value) => /^#{1,3}\s+/.test(value.trim()));
-
-  return line ? line.replace(/^#{1,3}\s+/, "").trim() : "Untitled Deck";
-}
-
-function getMemoPreview(memo: string) {
-  const line = memo.split("\n").find((value) => value.trim());
-  return line ? line.replace(/^#{1,6}\s+/, "").trim() : "（メモなし）";
-}
-
-function generateTrigger(raw: string, memo: string) {
-  const source = memo.trim() ? memo : raw;
-  const trigger = source
-    .split("\n")
-    .map((line) => line.replace(/^#{1,6}\s+/, "").trim())
-    .find(Boolean);
-
-  if (!trigger) return "（要約なし）";
-  return trigger.length > 50 ? `${trigger.slice(0, 50)}…` : trigger;
-}
-
-function formatDate(value: string) {
-  if (!value) return "日時なし";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return date.toLocaleString("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function parseDeck(text: string): Deck | null {
-  const yaml = readFrontmatter(text);
-  if (!yaml) return null;
-
-  const raw = getYamlBlock(yaml, "raw") || getBodySection(text, "Raw");
-  const memo = getYamlBlock(yaml, "memo") || getBodySection(text, "Memo");
-  const output = getYamlBlock(yaml, "output") || getBodySection(text, "Output");
-  const title = getYamlValue(yaml, "title") || getTitleFromRaw(raw);
-
-  return {
-    title,
-    created_at: getYamlValue(yaml, "created_at"),
-    thoughtdeck_url: getYamlValue(yaml, "thoughtdeck_url"),
-    raw,
-    memo,
-    output,
-    star: 0,
-    trigger: getYamlValue(yaml, "trigger") || "",
-  };
-}
-
-function deckKey(deck: Deck) {
-  return deck.thoughtdeck_url || deck.raw;
+function formatTitle(title: string) {
+  return title
+    .replace(/^\d{4}-\d{2}-\d{2}[_\d-]*/, "")
+    .replace(".md", "")
+    .replace(/_/g, " ")
+    .trim();
 }
 
 export default function MyDecksPage() {
-  const router = useRouter();
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [decks, setDecks] = useState<Deck[]>(loadSavedDecks);
-  const [qrHistory] = useState<QrHistoryItem[]>(loadQrHistory);
-  const [filterMode, setFilterMode] = useState<"all" | "star">("all");
-  const [importMessage, setImportMessage] = useState("");
-  const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
-  const sortedDecks = [...decks].sort((a, b) => {
-    if (b.star !== a.star) return b.star - a.star;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-  const visibleDecks = sortedDecks.filter((deck) =>
-    filterMode === "star" ? deck.star >= 3 : true,
-  );
+  const [decks, setDecks] = useState<Deck[]>([]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(decks));
-  }, [decks]);
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setDecks(JSON.parse(saved));
+      } catch {
+        setDecks([]);
+      }
+    }
+  }, []);
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
     if (!files) return;
 
-    const loaded = (
-      await Promise.all(Array.from(files).map(async (file) => parseDeck(await file.text())))
-    ).filter((deck): deck is Deck => Boolean(deck));
-    const loadedKeys = loaded.map(deckKey);
-    const currentKeys = new Set(decks.map(deckKey));
-    const updatedCount = loadedKeys.filter((key) => currentKeys.has(key)).length;
-    const addedCount = loaded.length - updatedCount;
-    const totalCount = updatedCount + addedCount;
+    const newDecks: Deck[] = [];
 
-    setDecks((current) => {
-      const merged = [...loaded, ...current];
-      return Array.from(new Map(merged.map((deck) => [deckKey(deck), deck])).values());
-    });
+    for (let file of Array.from(files)) {
+      const text = await file.text();
+      const { data, content } = matter(text);
 
-    setHighlightedKeys(loadedKeys);
-    setImportMessage(`${totalCount}件更新しました`);
-    window.setTimeout(() => setHighlightedKeys([]), 1200);
-    window.setTimeout(() => setImportMessage(""), 3000);
+      newDecks.push({
+        title: data.title || file.name,
+        summary: data.summary || "",
+        created_at: data.created_at || new Date().toISOString(),
 
-    if (fileRef.current) fileRef.current.value = "";
-  };
+        // ★完全対応
+        thoughtdeck_url: data.thoughtdeck_url || data.url || "",
 
-  const openDeck = (deck: Deck) => {
-    if (deck.thoughtdeck_url) {
-      window.location.assign(deck.thoughtdeck_url);
-      return;
+        is_starred: data.starred || false,
+        raw: content,
+      });
     }
 
-    const encoded = encodeDeck({
-      raw: deck.raw,
-      memo: deck.memo,
-      output: deck.output,
-      addedCards: [],
-      starred: [],
-    });
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const existing = saved ? JSON.parse(saved) : [];
 
-    router.push(`/?d=${encoded}`);
+    const merged = [...newDecks, ...existing];
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    setDecks(merged);
   };
 
-  const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
-    event.stopPropagation();
-    setDecks((current) => current.filter((deck) => deckKey(deck) !== key));
+  const handleClick = (deck: Deck) => {
+    console.log("URL:", deck.thoughtdeck_url); // ←確認用
+
+    if (deck.thoughtdeck_url) {
+      window.open(deck.thoughtdeck_url);
+    } else {
+      alert("このDeckにはURLがありません");
+    }
   };
 
-  const updateStar = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    key: string,
-    star: number,
-  ) => {
-    event.stopPropagation();
-    setDecks((current) =>
-      current.map((deck) => (deckKey(deck) === key ? { ...deck, star } : deck)),
-    );
+  const handleClear = () => {
+    const ok = confirm("書庫をすべて削除しますか？");
+    if (!ok) return;
+
+    localStorage.removeItem(STORAGE_KEY);
+    setDecks([]);
   };
 
   return (
-    <main className="min-h-screen bg-black px-5 py-6 text-white">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-6 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold">MyDecks</h1>
-            <p className="mt-1 text-sm text-slate-400">保存したThoughtDeckを読み込む</p>
-          </div>
+    <div className="h-screen flex bg-[#0f1115] text-white">
+      <aside className="w-48 px-4 py-6">
+        <div className="text-sm text-gray-300 mb-4">My Decks</div>
+        <div className="text-sm text-gray-500">QR履歴</div>
+      </aside>
 
+      <main className="flex-1 px-10 py-8">
+        <div className="flex justify-end items-center gap-4 mb-10">
           <button
-            onClick={() => router.push("/")}
-            className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
+            onClick={handleClear}
+            className="text-xs text-gray-500 hover:text-red-400"
           >
-            新しく思考する
+            クリア
           </button>
 
           <input
-            ref={fileRef}
             type="file"
-            accept=".md,text/markdown,text/plain"
+            accept=".md"
             multiple
+            onChange={handleImport}
             className="hidden"
-            onChange={(event) => handleFiles(event.target.files)}
+            id="md-upload"
           />
-        </header>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <section className="grid gap-4 lg:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setFilterMode("all")}
-                  className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                    filterMode === "all"
-                      ? "border-blue-300 bg-blue-500/20 text-blue-50"
-                      : "border-blue-500/30 text-slate-400 hover:border-blue-300/80 hover:bg-blue-500/10"
-                  }`}
-                >
-                  すべて
-                </button>
-                <button
-                  onClick={() => setFilterMode("star")}
-                  className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                    filterMode === "star"
-                      ? "border-blue-300 bg-blue-500/20 text-blue-50"
-                      : "border-blue-500/30 text-slate-400 hover:border-blue-300/80 hover:bg-blue-500/10"
-                  }`}
-                >
-                  ⭐3以上
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {importMessage && (
-                  <span className="text-sm text-blue-300">{importMessage}</span>
-                )}
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
-                >
-                  更新・取り込み
-                </button>
-              </div>
-            </div>
-
-            {decks.length === 0 ? (
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-slate-400">
-                <p>Obsidianで保存したMarkdownファイルを読み込むと、ここにDeckが並びます。</p>
-                <button
-                  onClick={() => router.push("/")}
-                  className="mt-4 rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
-                >
-                  新しく思考する
-                </button>
-              </div>
-            ) : (
-              visibleDecks.map((deck) => {
-                const key = deckKey(deck);
-
-                return (
-                  <article
-                    key={key}
-                    onClick={() => openDeck(deck)}
-                    className={`group cursor-pointer rounded-xl border border-blue-500/25 p-4 transition hover:border-blue-300/80 hover:bg-blue-500/10 hover:shadow-lg hover:shadow-blue-950/30 ${
-                      highlightedKeys.includes(key) ? "bg-blue-500/25" : "bg-blue-500/5"
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <h2 className="min-w-0 truncate text-base font-semibold text-blue-50">
-                          {deck.title}
-                        </h2>
-                        <div className="flex shrink-0 gap-0.5">
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <button
-                              key={value}
-                              onClick={(event) => updateStar(event, key, value)}
-                              className={`text-sm transition hover:text-yellow-300 ${
-                                value <= deck.star ? "text-yellow-400" : "text-slate-600"
-                              }`}
-                              title={`${value} stars`}
-                            >
-                              ★
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">{formatDate(deck.created_at)}</p>
-                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-300">
-                        {deck.trigger ? deck.trigger : "（trigger未設定）"}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        onClick={(event) => removeDeck(event, key)}
-                        className="rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-300 transition hover:border-red-400 hover:bg-red-500/10"
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
-            )}
-          </section>
-
-          <aside className="lg:col-span-1">
-            <div className="sticky top-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-              <h2 className="text-sm font-semibold text-blue-50">QR履歴</h2>
-              <div className="mt-3 grid gap-3">
-                {qrHistory.length === 0 ? (
-                  <div className="rounded-lg border border-blue-500/20 bg-black/30 p-3 text-sm text-slate-400">
-                    QR履歴はまだありません。
-                  </div>
-                ) : (
-                  qrHistory.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => window.location.assign(item.thoughtdeck_url)}
-                      className="rounded-lg border border-blue-500/20 bg-black/30 p-3 text-left transition hover:border-blue-300/80 hover:bg-blue-500/10"
-                    >
-                      <span className="block truncate text-sm font-semibold text-blue-50">
-                        {item.title || "Untitled Deck"}
-                      </span>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {formatDate(item.created_at)}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          </aside>
+          <label
+            htmlFor="md-upload"
+            className="text-blue-400 text-sm cursor-pointer hover:opacity-80"
+          >
+            Obsidianから探す →
+          </label>
         </div>
-      </div>
-    </main>
+
+        <section>
+          <div className="text-xs text-gray-400 mb-6">書庫</div>
+
+          <div className="border border-gray-800 rounded-lg overflow-hidden">
+            {decks.length === 0 && (
+              <div className="text-gray-500 text-sm p-6">
+                mdファイルを取り込んでください
+              </div>
+            )}
+
+            {decks.map((d, i) => (
+              <div
+                key={i}
+                onClick={() => handleClick(d)}
+                className="flex justify-between items-center px-4 py-4 border-b border-gray-800 cursor-pointer hover:bg-gray-800 transition"
+              >
+                <div>
+                  <div className="text-sm text-white">
+                    {formatTitle(d.title)}
+                  </div>
+
+                  <div className="text-xs text-gray-400 mt-1">
+                    {d.summary}
+                  </div>
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  {d.created_at?.slice(0, 10)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-16 opacity-60">
+          <div className="text-xs text-gray-500 mb-3">
+            共有された思考
+          </div>
+
+          <div className="text-sm text-gray-500">
+            （まだありません）
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }
