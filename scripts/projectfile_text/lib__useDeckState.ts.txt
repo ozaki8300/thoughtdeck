@@ -994,7 +994,7 @@ export function useDeckState(props?: UseDeckStateProps) {
 
   const copyMd = async () => {
     await navigator.clipboard.writeText(
-      buildExportMarkdown(raw, addedCards, memo, output),
+      buildThoughtDeckMd({ raw, memo, output, deckId }),
     );
     setCopyStatus("MDコピー済");
     window.setTimeout(() => setCopyStatus(""), 1800);
