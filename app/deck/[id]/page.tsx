@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { compressToEncodedURIComponent } from "lz-string";
 
 import { supabase } from "../../../lib/supabase";
@@ -44,7 +45,16 @@ export default async function DeckPage({ params }: DeckPageProps) {
     [],
   );
 
-  const url = new URL(longUrl, "http://localhost:3000");
+  const headersList = await headers();
+  const host =
+    headersList.get("x-forwarded-host") ??
+    headersList.get("host") ??
+    "localhost:3000";
+  const proto =
+    headersList.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  const request = { url: `${proto}://${host}` };
+  const url = new URL(longUrl, request.url);
   url.searchParams.set("ro", "1");
   redirect(url.toString());
 }
