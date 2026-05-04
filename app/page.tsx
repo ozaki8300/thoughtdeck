@@ -12,9 +12,11 @@ import {
   getDynamicColumnClass,
   nextThemeMode,
   themeLabel,
+  buildRestoreUrl,
   useDeckState,
 } from "../lib/useDeckState";
 import type { Card, OneColumnSection, UseDeckStateProps } from "../lib/useDeckState";
+import { createDeck, updateDeck } from "../lib/deckService";
 
 import type { CSSProperties } from "react";
 
@@ -187,11 +189,12 @@ export default function Home(props: HomeProps) {
   const [lastActivePanel, setLastActivePanel] = useState<"td-input" | "td-memo">("td-input");
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
+  const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
   const mergedProps = {
     ...props,
-    readOnly: props.readOnly || snapshotReadOnly,
+    readOnly: props.readOnly || isReadOnly,
   };
   const {
     raw,
@@ -205,8 +208,13 @@ export default function Home(props: HomeProps) {
     showQr,
     setShowQr,
     shareUrl,
+    setShareUrl,
     longUrl,
+    setLongUrl,
     qrError,
+    setQrError,
+    deckId,
+    setDeckId,
     selectedCardId,
     setSelectedCardId,
     focusMode,
@@ -274,6 +282,7 @@ export default function Home(props: HomeProps) {
     title,
     topSections,
     bottomSections,
+    addedCards,
     allQuickLinks,
     addCustomLink,
     removeCustomLink,
@@ -292,7 +301,6 @@ export default function Home(props: HomeProps) {
     hidePdf,
     clearPdf,
     togglePdf,
-    createShare,
     downloadMd,
     saveToObsidian,
     clearAll,
@@ -300,8 +308,61 @@ export default function Home(props: HomeProps) {
     insertTemplate,
     toggleStar,
     copyTemplateBundle,
-    isReadOnly,
   } = useDeckState(mergedProps);
+
+  const createShare = async () => {
+    if (isReadOnly) return;
+
+    try {
+      let id = deckId;
+
+      if (!id) {
+        id = await createDeck({
+          title,
+          raw,
+          memo,
+          output,
+        });
+        setDeckId(id);
+      } else {
+        await updateDeck(id, {
+          title,
+          raw,
+          memo,
+          output,
+        });
+      }
+
+      const longUrl = buildRestoreUrl(
+        raw,
+        memo,
+        output,
+        addedCards,
+        starred,
+      );
+      const shareUrl =
+        longUrl.length < 2000
+          ? `${longUrl}&ro=1`
+          : `${window.location.origin}/deck/${id}?ro=1`;
+
+      setShareUrl(shareUrl);
+      setLongUrl(longUrl);
+      setQrError("");
+      setShowQr(true);
+
+      await navigator.clipboard.writeText(shareUrl);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setIsReadOnly(new URLSearchParams(window.location.search).get("ro") === "1");
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const openMemoEditor = () => {
     setSelectedCardId("td-memo");
@@ -317,7 +378,8 @@ export default function Home(props: HomeProps) {
 
   useEffect(() => {
     if (isReadOnly) {
-      setMemoMode("preview");
+      const timer = window.setTimeout(() => setMemoMode("preview"), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [isReadOnly]);
 
@@ -351,7 +413,7 @@ export default function Home(props: HomeProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (isReadOnly) {
-        if (!["m", "d", "x", "o"].includes(key)) return;
+        if (!["m", "d"].includes(key)) return;
       }
 
       const isTyping =
@@ -1266,8 +1328,12 @@ export default function Home(props: HomeProps) {
                   <div className="mt-3 border-t border-[var(--td-border)] pt-3">
                     <p className="mb-2 text-[10pt] text-[var(--td-muted)]">保存系</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
-                      <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
+                      {!isReadOnly && (
+                        <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
+                      )}
+                      {!isReadOnly && (
+                        <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
+                      )}
                       {!isReadOnly && (
                         <button onClick={() => { createShare(); setOpenTopMenu(null); }} disabled={isReadOnly} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
                       )}
@@ -1332,9 +1398,9 @@ export default function Home(props: HomeProps) {
           onPdfPageChange={setPdfPage}
           onPdfSideChange={setPdfSide}
           onPdfWorkModeChange={setPdfWorkMode}
-          onRawChange={setRawWithCloudDirty}
-          onMemoChange={setMemoWithCloudDirty}
-          onOutputChange={setOutputWithCloudDirty}
+          onRawChange={isReadOnly ? () => undefined : setRawWithCloudDirty}
+          onMemoChange={isReadOnly ? () => undefined : setMemoWithCloudDirty}
+          onOutputChange={isReadOnly ? () => undefined : setOutputWithCloudDirty}
           onHidePdf={hidePdf}
           onOpenPdfPicker={openPdfPicker}
           onClearPdf={clearPdf}
@@ -1482,19 +1548,23 @@ export default function Home(props: HomeProps) {
             メモ
           </button>
 
-          <button
-            onClick={downloadMd}
-            className={`${topButtonClass} flex-1 text-center`}
-          >
-            保存
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={downloadMd}
+              className={`${topButtonClass} flex-1 text-center`}
+            >
+              保存
+            </button>
+          )}
 
-          <button
-            onClick={saveToObsidian}
-            className={`${topButtonClass} flex-1 text-center`}
-          >
-            Obsidian
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={saveToObsidian}
+              className={`${topButtonClass} flex-1 text-center`}
+            >
+              Obsidian
+            </button>
+          )}
 
           <button
             onClick={() => setThemeMode((mode) => nextThemeMode(mode))}
