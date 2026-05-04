@@ -10,6 +10,7 @@ import {
 } from "lz-string";
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "./deckTypes";
+import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
 import { getTitle } from "./deckParser";
 import { createDeck, updateDeck } from "./deckService";
 import { useCloudSave } from "./useCloudSave";
@@ -966,7 +967,7 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const downloadMd = () => {
-    const md = buildExportMarkdown(raw, addedCards, memo, output);
+    const md = buildThoughtDeckMd({ raw, memo, output, deckId });
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -985,7 +986,7 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const saveToObsidian = async () => {
-    const md = buildObsidianMarkdown(raw, addedCards, memo, output, starred);
+    const md = buildThoughtDeckMd({ raw, memo, output, deckId });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
     const filePath = `ThoughtDeck/${fileTitle}`;

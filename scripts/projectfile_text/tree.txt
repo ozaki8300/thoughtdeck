@@ -15,6 +15,7 @@ app/
 └── page.tsx
 
 lib/
+├── buildThoughtDeckMd.ts
 ├── deckParser.ts
 ├── deckService.ts
 ├── deckTypes.ts

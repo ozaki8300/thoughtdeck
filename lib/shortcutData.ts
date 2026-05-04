@@ -16,6 +16,7 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "O", description: "Obsidian保存", action: "saveObsidian" },
   { key: "T", description: "思考整理を実行（AIで構造化）", action: "showTemplate" },
   { key: "V", description: "視点を変更", action: "changePerspective" },
+  { key: "R", description: "メモ表示切替", action: "toggleMemoView" },
   { key: "X", description: "保存（ローカルに記録）", action: "downloadMd" },
   { key: "S", description: "選択カードに★を付ける／外す", action: "toggleStar" },
   { key: "Esc", description: "閉じる", action: "close" },

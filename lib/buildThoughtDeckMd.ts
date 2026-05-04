@@ -1,0 +1,83 @@
+import { getTitle } from "./deckParser";
+import { buildRestoreUrl } from "./useDeckState";
+
+type BuildThoughtDeckMdArgs = {
+  raw: string;
+  memo: string;
+  output: string;
+  deckId: string | null;
+};
+
+function getUserId() {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("td_user_id");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("td_user_id", id);
+  }
+  return id;
+}
+
+function getDeckId(existingId?: string | null) {
+  if (existingId) return existingId;
+
+  if (typeof window === "undefined") {
+    return crypto.randomUUID();
+  }
+
+  let id = localStorage.getItem("td_current_deck_id");
+
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("td_current_deck_id", id);
+  }
+
+  return id;
+}
+
+export function buildThoughtDeckMd({
+  raw,
+  memo,
+  output,
+  deckId,
+}: BuildThoughtDeckMdArgs) {
+  const title = getTitle(raw);
+  const userId = getUserId();
+  const deckIdFinal = getDeckId(deckId);
+  const now = new Date().toISOString();
+  const thoughtdeckUrl = buildRestoreUrl(raw, memo, output, [], []);
+
+  return `---
+format: thoughtdeck
+version: 1
+
+user_id: ${userId}
+deck_id: ${deckIdFinal}
+
+created_at: ${now}
+updated_at: ${now}
+
+thoughtdeck_url: ${thoughtdeckUrl}
+
+trigger:
+
+keywords: []
+links: []
+---
+
+# ${title}
+
+## ThoughtDeck
+
+### raw
+${raw ?? ""}
+
+### memo
+${memo ?? ""}
+
+### output
+${output ?? ""}
+
+### trigger
+`;
+}
