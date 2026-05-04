@@ -312,8 +312,6 @@ export default function Home(props: HomeProps) {
   } = useDeckState(mergedProps);
 
   const createShare = async () => {
-    if (isReadOnly) return;
-
     try {
       let id = deckId;
 
@@ -1575,7 +1573,6 @@ export default function Home(props: HomeProps) {
         <div className="flex items-center justify-between gap-2">
           <button
             onClick={createShare}
-            disabled={isReadOnly}
             className={`${topButtonClass} flex-1 text-center`}
           >
             共有
