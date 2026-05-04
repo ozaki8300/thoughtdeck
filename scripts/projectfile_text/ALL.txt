@@ -631,14 +631,16 @@ export default function Home(props: UseDeckStateProps) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isReadOnly) return;
-
       const key = e.key.toLowerCase();
+      if (isReadOnly) {
+        if (!["m", "d", "x", "o"].includes(key)) return;
+      }
+
       const isTyping =
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement;
 
-      if (isTyping && !["e", "r"].includes(key)) return;
+      if (isTyping) return;
 
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault();
