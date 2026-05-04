@@ -340,17 +340,15 @@ export default function Home(props: HomeProps) {
         addedCards,
         starred,
       );
-      const shareUrl =
-        longUrl.length < 2000
-          ? `${longUrl}&ro=1`
-          : `${window.location.origin}/deck/${id}?ro=1`;
+      const shareUrl = `${window.location.origin}/deck/${id}?ro=1`;
+      const copyUrl = `${longUrl}&ro=1`;
 
       setShareUrl(shareUrl);
-      setLongUrl(longUrl);
+      setLongUrl(copyUrl);
       setQrError("");
       setShowQr(true);
 
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(copyUrl);
     } catch (e) {
       console.error(e);
     }
