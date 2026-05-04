@@ -290,6 +290,7 @@ export default function Home(props: UseDeckStateProps) {
     insertTemplate,
     toggleStar,
     copyTemplateBundle,
+    isReadOnly,
   } = useDeckState(props);
 
   const openMemoEditor = () => {
@@ -303,6 +304,12 @@ export default function Home(props: UseDeckStateProps) {
     setLastActivePanel("td-input");
     setExpandedEditor("input");
   };
+
+  useEffect(() => {
+    if (isReadOnly) {
+      setMemoMode("preview");
+    }
+  }, [isReadOnly]);
 
   useEffect(() => {
     const shown = localStorage.getItem("td_hint_shown");
@@ -332,6 +339,8 @@ export default function Home(props: UseDeckStateProps) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isReadOnly) return;
+
       const key = e.key.toLowerCase();
       const isTyping =
         e.target instanceof HTMLInputElement ||
@@ -438,6 +447,7 @@ export default function Home(props: UseDeckStateProps) {
     selectedCardId,
     expandedEditor,
     lastActivePanel,
+    isReadOnly,
     setShowLeft,
     setShowRight,
     openOutputComposer,
@@ -652,9 +662,11 @@ export default function Home(props: UseDeckStateProps) {
               <p className="text-[10.5pt] text-[var(--td-muted)]">OUTPUT</p>
               <h2 className="text-[13pt] font-bold text-[var(--td-text)]">投稿文</h2>
             </div>
-            <button onClick={openOutputComposer} className="rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]">
-              編集 <span className="shortcut">(E)</span>
-            </button>
+            {!isReadOnly && (
+              <button onClick={openOutputComposer} className="rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]">
+                編集 <span className="shortcut">(E)</span>
+              </button>
+            )}
           </div>
           <section
             onClick={() => setSelectedCardId("td-output")}
@@ -781,6 +793,7 @@ export default function Home(props: UseDeckStateProps) {
                   autoFocus
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
+                  readOnly={isReadOnly}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") {
                       event.preventDefault();
@@ -849,7 +862,7 @@ export default function Home(props: UseDeckStateProps) {
               <div className="mt-5 border-t border-[var(--td-border)] pt-5">
                 <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考整理追加</p>
                 <input value={newTemplateTitle} onChange={(event) => setNewTemplateTitle(event.target.value)} placeholder="タイトル" className="mb-2 w-full rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] text-[var(--td-text)] outline-none focus:border-blue-500/50" />
-                <textarea value={newTemplateContent} onChange={(event) => setNewTemplateContent(event.target.value)} placeholder="思考整理本文" className="mb-2 min-h-[280px] w-full resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] leading-6 text-[var(--td-text)] outline-none focus:border-blue-500/50" />
+                <textarea value={newTemplateContent} onChange={(event) => setNewTemplateContent(event.target.value)} readOnly={isReadOnly} placeholder="思考整理本文" className="mb-2 min-h-[280px] w-full resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[10.5pt] leading-6 text-[var(--td-text)] outline-none focus:border-blue-500/50" />
                 <button onClick={addTemplate} className={`${topButtonClass} w-full`}>追加</button>
               </div>
             </aside>
@@ -863,7 +876,7 @@ export default function Home(props: UseDeckStateProps) {
 
                 <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
                   <h3 className="mb-3 text-[13pt] font-bold text-[var(--td-accent)]">自由記入欄</h3>
-                  <textarea value={templateInstruction} onChange={(event) => setTemplateInstruction(event.target.value)} placeholder="自由入力" className="h-32 w-full resize-y rounded-xl placeholder:text-neutral-600 border border-[var(--td-border)] bg-[var(--td-bg)] p-4 text-[11pt] leading-7 text-[var(--td-text)] outline-none focus:border-blue-500/50" />
+                  <textarea value={templateInstruction} onChange={(event) => setTemplateInstruction(event.target.value)} readOnly={isReadOnly} placeholder="自由入力" className="h-32 w-full resize-y rounded-xl placeholder:text-neutral-600 border border-[var(--td-border)] bg-[var(--td-bg)] p-4 text-[11pt] leading-7 text-[var(--td-text)] outline-none focus:border-blue-500/50" />
                 </section>
 
                 <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-5">
@@ -1112,21 +1125,25 @@ export default function Home(props: UseDeckStateProps) {
           )}
 
           <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
-            <button
-              onClick={changePerspective}
-              className={topButtonClass}
-              title="視点を変更"
-            >
-              視点 <span className="shortcut">(V)</span>
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={changePerspective}
+                className={topButtonClass}
+                title="視点を変更"
+              >
+                視点 <span className="shortcut">(V)</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setShowLeft((v) => !v)}
-              className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
-              title="素材欄を表示／非表示"
-            >
-              素材 <span className="shortcut">(I)</span>
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setShowLeft((v) => !v)}
+                className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
+                title="素材欄を表示／非表示"
+              >
+                素材 <span className="shortcut">(I)</span>
+              </button>
+            )}
 
             <button
               onClick={() => setShowRight((v) => !v)}
@@ -1136,13 +1153,15 @@ export default function Home(props: UseDeckStateProps) {
               メモ <span className="shortcut">(M)</span>
             </button>
 
-            <button
-              onClick={openOutputComposer}
-              className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
-              title="投稿文を作成します"
-            >
-              投稿 <span className="shortcut">(P)</span>
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={openOutputComposer}
+                className={`${topButtonClass} border-[var(--td-accent-border)] text-[var(--td-accent)]`}
+                title="投稿文を作成します"
+              >
+                投稿 <span className="shortcut">(P)</span>
+              </button>
+            )}
 
             <div className="relative">
               <button
@@ -1157,7 +1176,9 @@ export default function Home(props: UseDeckStateProps) {
                 <div className="absolute right-0 z-40 mt-2 w-[320px] rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
                   <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
+                    {!isReadOnly && (
+                      <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
+                    )}
                     <button onClick={() => { togglePdf(); setOpenTopMenu(null); }} className={`${topButtonClass} ${pdfUrl ? "border-[var(--td-accent-border)] text-[var(--td-accent)]" : ""}`}>
                       {!pdfUrl ? "PDFを開く" : isPdfOpen ? "PDF非表示" : "PDF表示"} <span className="shortcut">(D)</span>
                     </button>
@@ -1234,22 +1255,28 @@ export default function Home(props: UseDeckStateProps) {
                     <div className="grid grid-cols-2 gap-2">
                       <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
                       <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
-                      <button onClick={() => { createShare(); setOpenTopMenu(null); }} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
+                      {!isReadOnly && (
+                        <button onClick={() => { createShare(); setOpenTopMenu(null); }} disabled={isReadOnly} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
-                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">危険操作</p>
-                    <button
-                      onClick={() => {
-                        clearAll();
-                        setOpenTopMenu(null);
-                      }}
-                      className="w-full rounded-lg border border-red-800 px-3 py-2 text-[11pt] text-red-400 hover:bg-red-950/40"
-                    >
-                      新規作成
-                    </button>
-                  </div>
+                  {!isReadOnly && (
+                    <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                      <p className="mb-2 text-[10pt] text-[var(--td-muted)]">危険操作</p>
+                      <button
+                        onClick={() => {
+                          if (isReadOnly) return;
+                          clearAll();
+                          setOpenTopMenu(null);
+                        }}
+                        disabled={isReadOnly}
+                        className="w-full rounded-lg border border-red-800 px-3 py-2 text-[11pt] text-red-400 hover:bg-red-950/40"
+                      >
+                        新規作成
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1304,7 +1331,7 @@ export default function Home(props: UseDeckStateProps) {
           renderThoughtArea={renderThoughtArea}
         >
           <>
-            {showLeft && (
+            {!isReadOnly && showLeft && (
               <>
                 <aside
                   className="no-scrollbar w-full shrink-0 overflow-auto border-r border-[var(--td-border)] p-5 max-lg:border-b max-lg:border-r-0 lg:w-[var(--left-width)]"
@@ -1327,18 +1354,21 @@ export default function Home(props: UseDeckStateProps) {
                     </div>
                   </div>
 
-                  <div className="mb-3 grid grid-cols-5 gap-2">
-                    <button onClick={() => insertTemplate("top")} className={insertButtonClass} title="上部1カラムを追加">＋上</button>
-                    <button onClick={() => insertTemplate("left")} className={insertButtonClass} title="左カードを追加">＋左</button>
-                    <button onClick={() => insertTemplate("center")} className={insertButtonClass} title="中央カードを追加">＋中</button>
-                    <button onClick={() => insertTemplate("right")} className={insertButtonClass} title="右カードを追加">＋右</button>
-                    <button onClick={() => insertTemplate("bottom")} className={insertButtonClass} title="下部1カラムを追加">＋下</button>
-                  </div>
+                  {!isReadOnly && (
+                    <div className="mb-3 grid grid-cols-5 gap-2">
+                      <button onClick={() => insertTemplate("top")} disabled={isReadOnly} className={insertButtonClass} title="上部1カラムを追加">＋上</button>
+                      <button onClick={() => insertTemplate("left")} disabled={isReadOnly} className={insertButtonClass} title="左カードを追加">＋左</button>
+                      <button onClick={() => insertTemplate("center")} disabled={isReadOnly} className={insertButtonClass} title="中央カードを追加">＋中</button>
+                      <button onClick={() => insertTemplate("right")} disabled={isReadOnly} className={insertButtonClass} title="右カードを追加">＋右</button>
+                      <button onClick={() => insertTemplate("bottom")} disabled={isReadOnly} className={insertButtonClass} title="下部1カラムを追加">＋下</button>
+                    </div>
+                  )}
 
                   <textarea
                     ref={inputRef}
                     value={raw}
                     onChange={(e) => setRawWithCloudDirty(e.target.value)}
+                    readOnly={isReadOnly}
                     onFocus={() => {
                       setSelectedCardId("td-input");
                       setLastActivePanel("td-input");
@@ -1358,7 +1388,7 @@ export default function Home(props: UseDeckStateProps) {
               </>
             )}
 
-            {!showLeft && (
+            {!isReadOnly && !showLeft && (
               <button onClick={() => setShowLeft(true)} className="hidden w-9 shrink-0 border-r border-[var(--td-border)] bg-[var(--td-panel)] text-[11pt] text-[var(--td-text)] hover:bg-[var(--td-hover)] lg:block" title="素材を開く">▶</button>
             )}
 
@@ -1386,7 +1416,9 @@ export default function Home(props: UseDeckStateProps) {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-[13pt] font-bold text-[var(--td-text)]">メモ</h2>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"))} className={panelButtonClass}>表示切替 <span className="shortcut">(R)</span></button>
+                      {!isReadOnly && (
+                        <button onClick={() => setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"))} className={panelButtonClass}>表示切替 <span className="shortcut">(R)</span></button>
+                      )}
                     </div>
                   </div>
                   {memoMode === "edit" ? (
@@ -1394,6 +1426,7 @@ export default function Home(props: UseDeckStateProps) {
                       ref={memoRefLocal}
                       value={memo}
                       onChange={(event) => setMemoWithCloudDirty(event.target.value)}
+                      readOnly={isReadOnly}
                       onFocus={() => {
                         setSelectedCardId("td-memo");
                         setLastActivePanel("td-memo");
@@ -1410,6 +1443,7 @@ export default function Home(props: UseDeckStateProps) {
                       onClick={() => {
                         setSelectedCardId("td-memo");
                         setLastActivePanel("td-memo");
+                        if (isReadOnly) return;
                         setMemoMode("edit");
                       }}
                       className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[34vh] ${
@@ -1431,13 +1465,15 @@ export default function Home(props: UseDeckStateProps) {
 
       <footer className="sticky bottom-0 z-30 border-t border-[var(--td-border)] bg-[var(--td-bg)] p-2 lg:hidden">
         <div data-td-menu-root className="mx-auto flex max-w-md items-center justify-between gap-2 rounded-2xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1.5 shadow-2xl">
-          <button
-            onClick={openOutputComposer}
-            className={`${topButtonClass} flex-1 border-[var(--td-accent-border)] text-[var(--td-accent)]`}
-            title="投稿文を作成します"
-          >
-            投稿 <span className="shortcut">(P)</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={openOutputComposer}
+              className={`${topButtonClass} flex-1 border-[var(--td-accent-border)] text-[var(--td-accent)]`}
+              title="投稿文を作成します"
+            >
+              投稿 <span className="shortcut">(P)</span>
+            </button>
+          )}
 
           <button
             onClick={toggleMemoAndScroll}
@@ -1447,13 +1483,16 @@ export default function Home(props: UseDeckStateProps) {
             {showRight ? "▼ メモ" : "▶ メモ"} <span className="shortcut">(M)</span>
           </button>
 
-          <button
-            onClick={createShare}
-            className={`${topButtonClass} flex-1`}
-            title="QRを表示します"
-          >
-            QR <span className="shortcut">(Q)</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={createShare}
+              disabled={isReadOnly}
+              className={`${topButtonClass} flex-1`}
+              title="QRを表示します"
+            >
+              QR <span className="shortcut">(Q)</span>
+            </button>
+          )}
 
           <div className="relative">
             <button
@@ -1468,11 +1507,17 @@ export default function Home(props: UseDeckStateProps) {
               <div className="absolute bottom-12 right-0 z-50 w-[260px] rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-3 shadow-2xl">
                 <p className="mb-2 text-[10pt] text-[var(--td-muted)]">思考系</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
-                  <button onClick={() => { openMemoEditor(); setOpenTopMenu(null); }} className={`${topButtonClass} md:hidden`}>メモ編集 <span className="shortcut">(E)</span></button>
-                  <button onClick={() => { setShowLeft((v) => !v); setOpenTopMenu(null); }} className={topButtonClass}>
-                    {showLeft ? "素材非表示" : "素材表示"} <span className="shortcut">(I)</span>
-                  </button>
+                  {!isReadOnly && (
+                    <button onClick={() => { setShowTemplatePanel(true); setOpenTopMenu(null); }} className={topButtonClass}>思考整理 <span className="shortcut">(T)</span></button>
+                  )}
+                  {!isReadOnly && (
+                    <button onClick={() => { openMemoEditor(); setOpenTopMenu(null); }} className={`${topButtonClass} md:hidden`}>メモ編集 <span className="shortcut">(E)</span></button>
+                  )}
+                  {!isReadOnly && (
+                    <button onClick={() => { setShowLeft((v) => !v); setOpenTopMenu(null); }} className={topButtonClass}>
+                      {showLeft ? "素材非表示" : "素材表示"} <span className="shortcut">(I)</span>
+                    </button>
+                  )}
                   <button onClick={() => { setThemeMode((mode) => nextThemeMode(mode)); setOpenTopMenu(null); }} className={topButtonClass}>テーマ</button>
                 </div>
 
@@ -1481,19 +1526,28 @@ export default function Home(props: UseDeckStateProps) {
                   <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
                   <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
-                  <button onClick={() => { createShare(); setOpenTopMenu(null); }} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
+                  {!isReadOnly && (
+                    <button onClick={() => { createShare(); setOpenTopMenu(null); }} disabled={isReadOnly} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
+                  )}
                   </div>
                 </div>
 
-                <div className="mt-3 border-t border-[var(--td-border)] pt-3">
-                  <p className="mb-2 text-[10pt] text-[var(--td-muted)]">危険操作</p>
-                  <button
-                    onClick={() => { clearAll(); setOpenTopMenu(null); }}
-                    className="w-full rounded-lg border border-red-800 px-3 py-2 text-[11pt] text-red-400 hover:bg-red-950/40"
-                  >
-                    新規作成
-                  </button>
-                </div>
+                {!isReadOnly && (
+                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
+                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">危険操作</p>
+                    <button
+                      onClick={() => {
+                        if (isReadOnly) return;
+                        clearAll();
+                        setOpenTopMenu(null);
+                      }}
+                      disabled={isReadOnly}
+                      className="w-full rounded-lg border border-red-800 px-3 py-2 text-[11pt] text-red-400 hover:bg-red-950/40"
+                    >
+                      新規作成
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -411,6 +411,11 @@ export function useDeckState(props?: UseDeckStateProps) {
     setDraggingPdf,
   } = useDeckEditor(props);
 
+  const hasDParam =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("d");
+  const isReadOnly = props?.readOnly === true && !hasDParam;
+
   const perspective = placeholderSets[perspectiveIndex];
 
   const openOutputComposer = () => {
@@ -920,6 +925,8 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const createShare = async () => {
+    if (isReadOnly) return;
+
     try {
       let id = deckId;
 
@@ -997,6 +1004,8 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const clearAll = () => {
+    if (isReadOnly) return;
+
     if (!confirm("全ての内容をまっさらにしますか？")) return;
 
     setRaw(blankRaw);
@@ -1047,6 +1056,8 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const insertTemplate = (kind: "top" | Area | "bottom") => {
+    if (isReadOnly) return;
+
     setRawWithCloudDirty((prev) => {
       if (kind === "top") return insertTopSectionTemplate(prev);
       if (kind === "bottom") return insertBottomSectionTemplate(prev);
@@ -1234,5 +1245,6 @@ export function useDeckState(props?: UseDeckStateProps) {
     toggleStar,
     buildTemplateCopyText,
     copyTemplateBundle,
+    isReadOnly,
   };
 }
