@@ -112,6 +112,10 @@ function updateMyDecksLocal(title: string, thoughtdeck_url: string, deckId?: str
 }
 
 function normalizeInput(input: string) {
+  if (/^#\s+/m.test(input) || /^##\s+/m.test(input)) {
+    return input;
+  }
+
   if (/^###\s+/m.test(input)) return input;
 
   const blocks = input

@@ -84,7 +84,9 @@ export const placeholderSets = [
   },
 ] as const;
 
-export const blankRaw = `## 設問
+export const blankRaw = `# タイトル（例：投資判断の整理）
+
+## ISSUE
 - ここに入力
 
 ### 事実
@@ -100,7 +102,8 @@ export const blankRaw = `## 設問
 - ここに入力
 
 ## まとめ
-- ここに入力`;
+- ここに入力
+`;
 
 export const demoRaw = `# ファイナンス Day2 事業戦略と企業財務
 
