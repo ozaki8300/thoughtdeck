@@ -24,7 +24,7 @@ import {
 import type { Card, OneColumnSection, UseDeckStateProps } from "../../lib/useDeckState";
 import { createDeck, updateDeck } from "../../lib/deckService";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { use, useEffect, useRef, useState } from "react";
 
@@ -202,6 +202,7 @@ export default function Home(props: HomeProps) {
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
+  const hasShownInputGuide = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
   const mergedProps = {
@@ -454,10 +455,29 @@ export default function Home(props: HomeProps) {
     setExpandedEditor("memo");
   };
 
-  const openInputEditor = () => {
-    setSelectedCardId("td-input");
-    setLastActivePanel("td-input");
-    setExpandedEditor("input");
+  const handleRawKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const value = textarea.value;
+    const before = value.slice(0, start);
+    const currentLine = before.split("\n").pop() || "";
+    const isBullet = currentLine.startsWith("- ");
+    const isEmptyLine = currentLine.trim() === "";
+
+    if (isBullet && !isEmptyLine) {
+      e.preventDefault();
+
+      const insert = "\n- ";
+      const next = value.slice(0, start) + insert + value.slice(start);
+
+      setRaw(next);
+
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + insert.length;
+      }, 0);
+    }
   };
 
   useEffect(() => {
@@ -530,9 +550,11 @@ export default function Home(props: HomeProps) {
         e.preventDefault();
 
         if (expandedEditor === null) {
-          openInputEditor();
+          setShowLeft(true);
+          setSelectedCardId("td-input");
         } else if (expandedEditor === "memo") {
-          openInputEditor();
+          setShowLeft(true);
+          setSelectedCardId("td-input");
         } else {
           openMemoEditor();
         }
@@ -610,7 +632,6 @@ export default function Home(props: HomeProps) {
     setShowRight,
     openOutputComposer,
     openMemoEditor,
-    openInputEditor,
     setFocusMode,
     toggleStar,
     togglePdf,
@@ -650,7 +671,22 @@ export default function Home(props: HomeProps) {
     return (
       <div
         key={card.id}
-        onClick={() => setSelectedCardId(card.id)}
+        onClick={() => {
+          setSelectedCardId(card.id);
+
+          const cardContent = card.lines.join("\n").trim();
+          const isEmpty =
+            !cardContent ||
+            cardContent.includes("ここに入力");
+
+          if (!hasShownInputGuide.current && isEmpty) {
+            setShowLeft(true);
+            setSelectedCardId("td-input");
+            setShortcutHint("入力は左で行います");
+            window.setTimeout(() => setShortcutHint(""), 1200);
+            hasShownInputGuide.current = true;
+          }
+        }}
         className={`cursor-pointer rounded-xl border px-2 py-3 transition ${
           isSelected
             ? selectedThoughtClass
@@ -1303,7 +1339,10 @@ export default function Home(props: HomeProps) {
 
               {!isReadOnly && (
                 <button
-                  onClick={() => setShowLeft((v) => !v)}
+                  onClick={() => {
+                    setShowLeft(true);
+                    setSelectedCardId("td-input");
+                  }}
                   className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
                   title="素材欄を表示／非表示"
                 >
@@ -1531,7 +1570,7 @@ export default function Home(props: HomeProps) {
                       >
                          📚
                       </button>
-                      <button onClick={openInputEditor} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
+                      <button onClick={() => { setShowLeft(true); setSelectedCardId("td-input"); }} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
                     </div>
                   </div>
 
@@ -1549,6 +1588,7 @@ export default function Home(props: HomeProps) {
                     ref={inputRef}
                     value={raw}
                     onChange={(e) => setRawWithCloudDirty(e.target.value)}
+                    onKeyDown={handleRawKeyDown}
                     readOnly={isReadOnly}
                     onFocus={() => {
                       setSelectedCardId("td-input");

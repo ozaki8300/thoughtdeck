@@ -88,17 +88,23 @@ export const placeholderSets = [
   },
 ] as const;
 
-export const blankRaw = `# タイトル
+export const blankRaw = `## 設問
+- ここに入力
 
-## 設問
-- 
-
-### 見出し
+### 事実
 @area: left
--
+- ここに入力
+
+### 解釈
+@area: center
+- ここに入力
+
+### 論点
+@area: right
+- ここに入力
 
 ## まとめ
-- `;
+- ここに入力`;
 
 export const demoRaw = `# ファイナンス Day2 事業戦略と企業財務
 
