@@ -23,7 +23,7 @@ function buildRestoreUrl(
   starred: string[],
 ) {
   const deck = { raw, memo, output, addedCards, starred };
-  return `/?d=${compressToEncodedURIComponent(JSON.stringify(deck))}`;
+  return `/thoughtdeck?d=${compressToEncodedURIComponent(JSON.stringify(deck))}`;
 }
 
 export default async function DeckPage({ params }: DeckPageProps) {
