@@ -104,6 +104,27 @@ function getTitleFromRaw(raw: string) {
   return line ? line.replace(/^#{1,3}\s+/, "").trim() : "Untitled Deck";
 }
 
+function stripFrontmatter(text: string) {
+  return text.replace(/^---[\s\S]*?---\n?/, "");
+}
+
+function stripObsidianSections(text: string) {
+  return text
+    .replace(/## 🧠 Raw\s*/, "")
+    .replace(/---\s*## ✍️ Memo[\s\S]*?---\s*/, "")
+    .replace(/## 📤 Output[\s\S]*$/, "");
+}
+
+function extractSections(text: string) {
+  const memoMatch = text.match(/## ✍️ Memo\s*([\s\S]*?)\n---/);
+  const outputMatch = text.match(/## 📤 Output\s*([\s\S]*)$/);
+
+  return {
+    memo: memoMatch ? memoMatch[1].trim() : "",
+    output: outputMatch ? outputMatch[1].trim() : "",
+  };
+}
+
 function getMemoPreview(memo: string) {
   const line = memo.split("\n").find((value) => value.trim());
   return line ? line.replace(/^#{1,6}\s+/, "").trim() : "（メモなし）";
@@ -137,23 +158,20 @@ function formatDate(value: string) {
 }
 
 function parseDeck(text: string): Deck | null {
-  const yaml = readFrontmatter(text);
-  if (!yaml) return null;
-
-  const raw = getYamlBlock(yaml, "raw") || getBodySection(text, "Raw");
-  const memo = getYamlBlock(yaml, "memo") || getBodySection(text, "Memo");
-  const output = getYamlBlock(yaml, "output") || getBodySection(text, "Output");
-  const title = getYamlValue(yaml, "title") || getTitleFromRaw(raw);
+  const cleaned = stripFrontmatter(text);
+  const { memo, output } = extractSections(cleaned);
+  const raw = stripObsidianSections(cleaned);
+  const title = getTitleFromRaw(raw);
 
   return {
     title,
-    created_at: getYamlValue(yaml, "created_at"),
-    thoughtdeck_url: getYamlValue(yaml, "thoughtdeck_url"),
+    created_at: new Date().toISOString(),
+    thoughtdeck_url: "",
     raw,
     memo,
     output,
     star: 0,
-    trigger: getYamlValue(yaml, "trigger") || "",
+    trigger: generateTrigger(raw, memo),
   };
 }
 
@@ -216,6 +234,8 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
+    console.log("🔥 openDeck called");
+
     const encoded = encodeDeck({
       raw: deck.raw,
       memo: deck.memo,
@@ -223,6 +243,8 @@ export default function MyDecksPage() {
       addedCards: [],
       starred: [],
     });
+
+    console.log("👉 URL:", `/thoughtdeck?d=${encoded}`);
 
     router.push(`/thoughtdeck?d=${encoded}`);
   };

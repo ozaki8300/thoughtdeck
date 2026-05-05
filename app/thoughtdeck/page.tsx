@@ -387,7 +387,8 @@ export default function Home(props: HomeProps) {
       setOutput("");
       setAddedCards([]);
       setStarred([]);
-      window.history.replaceState({}, "", "/thoughtdeck");
+      // TODO: URLを状態として保持する設計のため無効化
+      // window.history.replaceState({}, "", "/thoughtdeck");
       return;
     }
 
@@ -405,11 +406,13 @@ export default function Home(props: HomeProps) {
           setIsRestoredFromUrl(true);
         }
 
-        window.history.replaceState({}, "", "/thoughtdeck");
+        // TODO: URLを状態として保持する設計のため無効化
+        // window.history.replaceState({}, "", "/thoughtdeck");
         return;
       } catch {
         console.error("decode failed");
-        window.history.replaceState({}, "", "/thoughtdeck");
+        // TODO: URLを状態として保持する設計のため無効化
+        // window.history.replaceState({}, "", "/thoughtdeck");
       }
     }
 

@@ -158,7 +158,7 @@ function buildRestoreUrl(
   starred: string[],
 ) {
   const deck = { raw, memo, output, addedCards, starred };
-  return `/?d=${compressToEncodedURIComponent(JSON.stringify(deck))}`;
+  return `/thoughtdeck?d=${compressToEncodedURIComponent(JSON.stringify(deck))}`;
 }
 
 export default async function DeckPage({ params }: DeckPageProps) {
@@ -423,23 +423,20 @@ function formatDate(value: string) {
 }
 
 function parseDeck(text: string): Deck | null {
-  const yaml = readFrontmatter(text);
-  if (!yaml) return null;
-
-  const raw = getYamlBlock(yaml, "raw") || getBodySection(text, "Raw");
-  const memo = getYamlBlock(yaml, "memo") || getBodySection(text, "Memo");
-  const output = getYamlBlock(yaml, "output") || getBodySection(text, "Output");
-  const title = getYamlValue(yaml, "title") || getTitleFromRaw(raw);
+  const raw = text;
+  const memo = "";
+  const output = "";
+  const title = getTitleFromRaw(raw);
 
   return {
     title,
-    created_at: getYamlValue(yaml, "created_at"),
-    thoughtdeck_url: getYamlValue(yaml, "thoughtdeck_url"),
+    created_at: new Date().toISOString(),
+    thoughtdeck_url: "",
     raw,
     memo,
     output,
     star: 0,
-    trigger: getYamlValue(yaml, "trigger") || "",
+    trigger: generateTrigger(raw, memo),
   };
 }
 
