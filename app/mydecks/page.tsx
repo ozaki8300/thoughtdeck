@@ -275,30 +275,47 @@ export default function MyDecksPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black px-5 py-6 text-white">
+    <main className="mydecks-page td-app-enter min-h-screen bg-[var(--td-bg)] px-5 py-6 text-[var(--td-text)]">
+      <style jsx global>{`
+        .mydecks-page {
+          --td-bg: #0f172a;
+          --td-panel: rgba(15, 23, 42, 0.88);
+          --td-surface-soft: rgba(22, 32, 51, 0.74);
+          --td-border: rgba(148, 163, 184, 0.18);
+          --td-border-strong: rgba(148, 163, 184, 0.32);
+          --td-text: #e5e7eb;
+          --td-text-soft: #cbd5e1;
+          --td-muted: #94a3b8;
+          --td-hover: rgba(37, 99, 235, 0.12);
+          --td-card-bg: rgba(17, 24, 39, 0.72);
+          --td-card-border-hover: rgba(96, 165, 250, 0.38);
+          --td-accent: #93c5fd;
+          --td-accent-bg: rgba(37, 99, 235, 0.14);
+          --td-accent-border: rgba(96, 165, 250, 0.46);
+        }
+
+        @keyframes td-app-enter {
+          0% {
+            opacity: 0;
+            transform: translateY(6px);
+            filter: blur(2px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+        }
+
+        .td-app-enter {
+          animation: td-app-enter 0.42s ease-out 1 both;
+        }
+      `}</style>
       <div className="mx-auto max-w-6xl">
         <header className="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold">MyDecks</h1>
-            <p className="mt-1 text-sm text-slate-400">保存したThoughtDeckを読み込む</p>
-          </div>
-
-          <div className="flex gap-2">
-            {hasDraft && (
-              <button
-                onClick={() => router.push("/thoughtdeck")}
-                className="rounded-lg border border-yellow-400/60 px-4 py-2 text-sm text-yellow-200 transition hover:bg-yellow-500/20"
-              >
-                ▶ 続きから再開
-              </button>
-            )}
-
-            <button
-              onClick={() => router.push("/thoughtdeck?new=1")}
-              className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:bg-blue-500/20"
-            >
-              ＋ 新しく作る
-            </button>
+            <h1 className="font-sans text-xl font-bold text-[var(--td-text)]">My Decks</h1>
+            <p className="font-sans mt-1 text-sm text-[var(--td-muted)]">Think. Deck. Share.</p>
           </div>
 
           <input
@@ -314,7 +331,7 @@ export default function MyDecksPage() {
           />
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6">
           <section
             onDragOver={(event) => {
               event.preventDefault();
@@ -328,18 +345,18 @@ export default function MyDecksPage() {
               const files = Array.from(event.dataTransfer.files);
               handleFiles(files);
             }}
-            className={`grid gap-4 transition lg:col-span-2 ${
-              isDragging ? "bg-blue-500/20 border-blue-400" : ""
+            className={`grid gap-4 transition ${
+              isDragging ? "border-[var(--td-accent-border)] bg-[var(--td-hover)]" : ""
             }`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center justify-between">
               <div className="flex gap-2">
                 <button
                   onClick={() => setFilterMode("all")}
                   className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                     filterMode === "all"
-                      ? "border-blue-300 bg-blue-500/20 text-blue-50"
-                      : "border-blue-500/30 text-slate-400 hover:border-blue-300/80 hover:bg-blue-500/10"
+                      ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]"
+                      : "border-[var(--td-border-strong)] text-[var(--td-muted)] hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
                   }`}
                 >
                   すべて
@@ -348,42 +365,56 @@ export default function MyDecksPage() {
                   onClick={() => setFilterMode("star")}
                   className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                     filterMode === "star"
-                      ? "border-blue-300 bg-blue-500/20 text-blue-50"
-                      : "border-blue-500/30 text-slate-400 hover:border-blue-300/80 hover:bg-blue-500/10"
+                      ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]"
+                      : "border-[var(--td-border-strong)] text-[var(--td-muted)] hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
                   }`}
                 >
                   ⭐3以上
                 </button>
               </div>
 
-              <div className="flex items-start gap-3">
-                {importMessage && (
-                  <span className="text-sm text-blue-300">{importMessage}</span>
-                )}
-                <div>
+              {importMessage && (
+                <span className="text-sm text-[var(--td-accent)]">{importMessage}</span>
+              )}
+
+              <div className="flex items-center gap-2">
+                {hasDraft && (
                   <button
-                    onClick={() => fileRef.current?.click()}
-                    className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
+                    onClick={() => router.push("/thoughtdeck")}
+                    className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-sm text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
                   >
-                    Obsidianから取り込む
+                    ▶ 再開
                   </button>
-                  <p className="mt-1 text-xs text-slate-500">
-                    複数のMarkdownファイルを選択できます（ThoughtDeckフォルダ推奨）
-                  </p>
+                )}
+
+                <div className="hidden sm:flex gap-2">
+                <button
+                  onClick={() => router.push("/thoughtdeck?new=1")}
+                  className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-sm text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                >
+                  ＋ 新規作成
+                </button>
+
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)]"
+                >
+                  取り込む
+                </button>
                 </div>
               </div>
             </div>
 
             {decks.length === 0 ? (
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-slate-400">
+              <div className="rounded-xl border border-[var(--td-border)] bg-[var(--td-card-bg)] p-5 text-sm text-[var(--td-muted)]">
                 <p>Obsidianで保存したMarkdownを取り込むと、ここにDeckが並びます。</p>
                 <button
                   onClick={() => fileRef.current?.click()}
-                  className="mt-4 rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
+                  className="mt-4 rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
                 >
-                  Obsidianから取り込む
+                  取り込む
                 </button>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-[var(--td-muted)]">
                   複数ファイル選択できます
                 </p>
               </div>
@@ -395,13 +426,13 @@ export default function MyDecksPage() {
                   <article
                     key={key}
                     onClick={() => openDeck(deck)}
-                    className={`group cursor-pointer rounded-xl border border-blue-500/25 p-4 transition transform hover:scale-[1.01] hover:border-blue-300/80 hover:bg-blue-500/10 hover:shadow-lg hover:shadow-blue-950/30 ${
-                      highlightedKeys.includes(key) ? "bg-blue-500/25" : "bg-blue-500/5"
+                    className={`group cursor-pointer rounded-xl border border-[var(--td-border)] p-4 transition transform hover:scale-[1.01] hover:border-[var(--td-card-border-hover)] hover:bg-[var(--td-hover)] hover:shadow-lg ${
+                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
                     }`}
                   >
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-3">
-                        <h2 className="min-w-0 truncate text-sm text-slate-400">
+                        <h2 className="min-w-0 truncate text-sm text-[var(--td-muted)]">
                           {deck.title}
                         </h2>
                         <div className="flex shrink-0 gap-0.5">
@@ -409,8 +440,8 @@ export default function MyDecksPage() {
                             <button
                               key={value}
                               onClick={(event) => updateStar(event, key, value)}
-                              className={`text-sm transition hover:text-yellow-300 ${
-                                value <= deck.star ? "text-yellow-400" : "text-slate-600"
+                              className={`text-sm transition hover:text-[var(--td-accent)] ${
+                                value <= deck.star ? "text-[var(--td-accent)]" : "text-[var(--td-muted)]"
                               }`}
                               title={`${value} stars`}
                             >
@@ -419,8 +450,8 @@ export default function MyDecksPage() {
                           ))}
                         </div>
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-600">{formatDate(deck.created_at)}</p>
-                      <p className="mt-2 line-clamp-2 text-base font-medium leading-6 text-blue-100">
+                      <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
+                      <p className="mt-2 line-clamp-2 text-base font-medium leading-6 text-[var(--td-text)]">
                         {deck.trigger ? deck.trigger : "（要約なし）"}
                       </p>
                     </div>
@@ -428,7 +459,7 @@ export default function MyDecksPage() {
                     <div className="mt-4 flex justify-end">
                       <button
                         onClick={(event) => removeDeck(event, key)}
-                        className="rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-300 transition hover:border-red-400 hover:bg-red-500/10"
+                        className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
                       >
                         削除
                       </button>
@@ -439,36 +470,34 @@ export default function MyDecksPage() {
             )}
           </section>
 
-          <aside className="lg:col-span-1">
-            <div className="sticky top-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-              <h2 className="text-sm font-semibold text-blue-50">QR履歴</h2>
-              <div className="mt-3 grid gap-3">
-                {qrHistory.length === 0 ? (
-                  <div className="rounded-lg border border-blue-500/20 bg-black/30 p-3 text-sm text-slate-400">
-                    QR履歴はまだありません。
-                  </div>
-                ) : (
-                  qrHistory.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => window.location.assign(item.thoughtdeck_url)}
-                      className="rounded-lg border border-blue-500/20 bg-black/30 p-3 text-left transition hover:border-blue-300/80 hover:bg-blue-500/10"
-                    >
-                      <span className="block truncate text-sm font-semibold text-blue-50">
-                        {item.title || "Untitled Deck"}
-                      </span>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {formatDate(item.created_at)}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
+          <section className="rounded-xl border border-[var(--td-border)] bg-[var(--td-card-bg)] p-4">
+            <h2 className="text-sm font-semibold text-[var(--td-text)]">QR履歴</h2>
+            <div className="mt-3 grid gap-3">
+              {qrHistory.length === 0 ? (
+                <div className="rounded-lg border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-3 text-sm text-[var(--td-muted)]">
+                  QR履歴はまだありません。
+                </div>
+              ) : (
+                qrHistory.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => window.location.assign(item.thoughtdeck_url)}
+                    className="rounded-lg border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-3 text-left transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                  >
+                    <span className="block truncate text-sm font-semibold text-[var(--td-text)]">
+                      {item.title || "Untitled Deck"}
+                    </span>
+                    <span className="mt-1 block text-xs text-[var(--td-muted)]">
+                      {formatDate(item.created_at)}
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
-          </aside>
+          </section>
         </div>
         {isDragging && (
-          <div className="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/40 text-lg text-white">
+          <div className="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/40 text-lg text-[var(--td-text)]">
             ファイルをドロップして更新
           </div>
         )}
