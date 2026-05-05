@@ -250,12 +250,19 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
-    if (deck.thoughtdeck_url) {
-      window.location.assign(deck.thoughtdeck_url);
-      return;
+    if (!deck.thoughtdeck_url) return;
+
+    let url = deck.thoughtdeck_url;
+
+    // localhost対策（本番用）
+    if (url.includes("localhost")) {
+      url = url.replace(
+        "http://localhost:3000",
+        "https://www.thoughtdeck.app"
+      );
     }
 
-    console.warn("thoughtdeck_urlがありません");
+    window.location.assign(url);
   };
 
   const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
