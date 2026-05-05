@@ -196,6 +196,7 @@ export default function MyDecksPage() {
   const [importMessage, setImportMessage] = useState("");
   const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
   const [hasDraft, setHasDraft] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const sortedDecks = [...decks].sort((a, b) => {
     if (b.star !== a.star) return b.star - a.star;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -216,11 +217,11 @@ export default function MyDecksPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files) return;
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return;
 
     const loaded = (
-      await Promise.all(Array.from(files).map(async (file) => parseDeck(await file.text())))
+      await Promise.all(files.map(async (file) => parseDeck(await file.text())))
     ).filter((deck): deck is Deck => Boolean(deck));
 
     if (loaded.length === 0) {
@@ -306,12 +307,31 @@ export default function MyDecksPage() {
             accept=".md,text/markdown,text/plain"
             multiple
             className="hidden"
-            onChange={(event) => handleFiles(event.target.files)}
+            onChange={(event) => {
+              const files = Array.from(event.target.files || []);
+              handleFiles(files);
+            }}
           />
         </header>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <section className="grid gap-4 lg:col-span-2">
+          <section
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+
+              const files = Array.from(event.dataTransfer.files);
+              handleFiles(files);
+            }}
+            className={`grid gap-4 transition lg:col-span-2 ${
+              isDragging ? "bg-blue-500/20 border-blue-400" : ""
+            }`}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex gap-2">
                 <button
@@ -447,6 +467,11 @@ export default function MyDecksPage() {
             </div>
           </aside>
         </div>
+        {isDragging && (
+          <div className="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/40 text-lg text-white">
+            ファイルをドロップして更新
+          </div>
+        )}
       </div>
     </main>
   );
