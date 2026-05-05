@@ -55,10 +55,10 @@ export type ParsedDeck = {
   bottomSections: OneColumnSection[];
 };
 
-export const THOUGHTDECK_HOME_URL = "https://thought-deck.vercel.app/";
+export const THOUGHTDECK_HOME_URL = "/";
 
 export const defaultQuickLinks = [
-  { label: "ThoughtDeck", url: "https://thought-deck.vercel.app/" },
+  { label: "ThoughtDeck", url: "/" },
   { label: "GLOBIS VC", url: "https://vc.globis.ac.jp/wam/auth/login" },
 ] as const;
 

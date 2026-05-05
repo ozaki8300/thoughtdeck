@@ -1561,7 +1561,7 @@ export default function Home(props: HomeProps) {
       <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
 
-      <div className="flex h-[calc(100vh-70px)] overflow-hidden max-lg:h-auto max-lg:flex-col max-lg:overflow-visible">
+      <div className="flex h-[calc(100vh-70px)] overflow-hidden max-lg:h-[calc(100vh-70px)] max-lg:flex-col max-lg:overflow-visible">
         <PDFViewer
           pdfInputRef={pdfInputRef}
           pdfUrl={pdfUrl}
@@ -1636,7 +1636,7 @@ export default function Home(props: HomeProps) {
                       setLastActivePanel("td-input");
                     }}
                     placeholder="思考の素材を書く（授業メモ・気づき・仮説など）"
-                    className="no-scrollbar h-[calc(100vh-205px)] w-full resize-none rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[42vh]"
+                    className="no-scrollbar h-[calc(100vh-205px)] w-full resize-none rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[30vh]"
                   />
                 </aside>
                 <button
@@ -1694,7 +1694,7 @@ export default function Home(props: HomeProps) {
                         setLastActivePanel("td-memo");
                       }}
                       placeholder="授業中の気づき・違和感・発言メモを書く"
-                      className={`no-scrollbar h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:h-[34vh] ${
+                      className={`no-scrollbar h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:h-[30vh] ${
                         selectedCardId === "td-memo"
                           ? selectedThoughtClass
                           : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
@@ -1708,7 +1708,7 @@ export default function Home(props: HomeProps) {
                         if (isReadOnly) return;
                         setMemoMode("edit");
                       }}
-                      className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[34vh] ${
+                      className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[30vh] ${
                         selectedCardId === "td-memo"
                           ? selectedThoughtClass
                           : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
@@ -1728,6 +1728,15 @@ export default function Home(props: HomeProps) {
       <footer className="sticky bottom-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 lg:hidden">
         {openMobileMenu && (
           <div className="absolute bottom-full right-2 mb-2 flex w-44 flex-col gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-2 shadow-2xl">
+            <button
+              onClick={() => {
+                setOpenMobileMenu(false);
+                router.push("/mydecks");
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              MyDeck
+            </button>
             <button
               onClick={() => {
                 setThemeMode((mode) => nextThemeMode(mode));
