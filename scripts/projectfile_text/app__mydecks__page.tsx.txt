@@ -108,6 +108,27 @@ function getTitleFromRaw(raw: string) {
   return line ? line.replace(/^#{1,3}\s+/, "").trim() : "Untitled Deck";
 }
 
+function stripFrontmatter(text: string) {
+  return text.replace(/^---[\s\S]*?---\n?/, "");
+}
+
+function stripObsidianSections(text: string) {
+  return text
+    .replace(/## 🧠 Raw\s*/, "")
+    .replace(/---\s*## ✍️ Memo[\s\S]*?---\s*/, "")
+    .replace(/## 📤 Output[\s\S]*$/, "");
+}
+
+function extractSections(text: string) {
+  const memoMatch = text.match(/## ✍️ Memo\s*([\s\S]*?)\n---/);
+  const outputMatch = text.match(/## 📤 Output\s*([\s\S]*)$/);
+
+  return {
+    memo: memoMatch ? memoMatch[1].trim() : "",
+    output: outputMatch ? outputMatch[1].trim() : "",
+  };
+}
+
 function getMemoPreview(memo: string) {
   const line = memo.split("\n").find((value) => value.trim());
   return line ? line.replace(/^#{1,6}\s+/, "").trim() : "（メモなし）";
@@ -141,9 +162,9 @@ function formatDate(value: string) {
 }
 
 function parseDeck(text: string): Deck | null {
-  const raw = text;
-  const memo = "";
-  const output = "";
+  const cleaned = stripFrontmatter(text);
+  const { memo, output } = extractSections(cleaned);
+  const raw = stripObsidianSections(cleaned);
   const title = getTitleFromRaw(raw);
 
   return {
@@ -217,6 +238,8 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
+    console.log("🔥 openDeck called");
+
     const encoded = encodeDeck({
       raw: deck.raw,
       memo: deck.memo,
@@ -224,6 +247,8 @@ export default function MyDecksPage() {
       addedCards: [],
       starred: [],
     });
+
+    console.log("👉 URL:", `/thoughtdeck?d=${encoded}`);
 
     router.push(`/thoughtdeck?d=${encoded}`);
   };
