@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 export default function Home() {
   const router = useRouter();
   const [hasDeck, setHasDeck] = useState(false);
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
     try {
@@ -18,29 +19,64 @@ export default function Home() {
     } catch {
       setHasDeck(false);
     }
+
+    // アニメーション開始
+    setTimeout(() => setShow(true), 100);
   }, []);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black text-blue-100">
-      <div className="flex flex-col items-center gap-6">
+    <main className="flex min-h-screen items-center justify-center bg-white dark:bg-[var(--td-bg)] text-black dark:text-blue-100">
+      <div className="flex flex-col items-center gap-6 text-center">
 
-        {/* 新規思考 */}
-        <button
-          onClick={() => router.push("/thoughtdeck")}
-          className="rounded-lg border border-blue-400/70 px-6 py-3 hover:bg-blue-500/20 transition"
+        {/* タイトル */}
+        <h1
+          className={`text-4xl font-bold transition-all duration-700 ${
+            show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
         >
-          ＋ 新しく思考する
-        </button>
+          ThoughtDeck
+        </h1>
 
-        {/* MyDeck（データある時だけ） */}
-        {hasDeck && (
+        {/* サブコピー */}
+        <p
+          className={`text-sm opacity-70 transition-all duration-700 delay-200 ${
+            show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
+        >
+          思考を、構造化する。
+        </p>
+
+        {/* サブライン */}
+        <p
+          className={`text-xs opacity-50 transition-all duration-700 delay-300 ${
+            show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
+        >
+          Think. Deck. Share.
+        </p>
+
+        {/* ボタン */}
+        <div
+          className={`flex flex-col gap-4 mt-6 transition-all duration-700 delay-500 ${
+            show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
+        >
           <button
-            onClick={() => router.push("/mydecks")}
+            onClick={() => router.push("/thoughtdeck")}
             className="rounded-lg border border-blue-400/70 px-6 py-3 hover:bg-blue-500/20 transition"
           >
-            MyDeck
+            思考をはじめる
           </button>
-        )}
+
+          {hasDeck && (
+            <button
+              onClick={() => router.push("/mydecks")}
+              className="rounded-lg border border-blue-400/40 px-6 py-3 hover:bg-blue-500/10 transition text-sm"
+            >
+              MyDeckを見る
+            </button>
+          )}
+        </div>
 
       </div>
     </main>

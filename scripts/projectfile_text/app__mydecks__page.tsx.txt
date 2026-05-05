@@ -6,15 +6,11 @@ FILE: app/mydecks/page.tsx
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { encodeDeck } from "../../lib/useDeckState";
 
 type Deck = {
   title: string;
   created_at: string;
   thoughtdeck_url: string;
-  raw: string;
-  memo: string;
-  output: string;
   star: number;
   trigger: string;
 };
@@ -37,7 +33,9 @@ function loadSavedDecks() {
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved
       ? (JSON.parse(saved) as Deck[]).map((deck) => ({
-          ...deck,
+          title: deck.title,
+          created_at: deck.created_at,
+          thoughtdeck_url: deck.thoughtdeck_url,
           star: deck.star ?? 0,
           trigger: deck.trigger ?? "",
         }))
@@ -162,25 +160,35 @@ function formatDate(value: string) {
 }
 
 function parseDeck(text: string): Deck | null {
-  const cleaned = stripFrontmatter(text);
-  const { memo, output } = extractSections(cleaned);
-  const raw = stripObsidianSections(cleaned);
-  const title = getTitleFromRaw(raw);
+  const yaml = readFrontmatter(text);
+
+  const type = getYamlValue(yaml, "type") || getYamlValue(yaml, "format");
+  if (type !== "thoughtdeck") return null;
+
+  const raw = getYamlBlock(yaml, "raw");
+  const memo = getYamlBlock(yaml, "memo");
+
+  const title =
+    getYamlValue(yaml, "title") || getTitleFromRaw(raw);
+
+  const created_at =
+    getYamlValue(yaml, "created_at") ||
+    new Date().toISOString();
+
+  const thoughtdeck_url =
+    getYamlValue(yaml, "thoughtdeck_url");
 
   return {
     title,
-    created_at: new Date().toISOString(),
-    thoughtdeck_url: "",
-    raw,
-    memo,
-    output,
+    created_at,
+    thoughtdeck_url,
     star: 0,
     trigger: generateTrigger(raw, memo),
   };
 }
 
 function deckKey(deck: Deck) {
-  return deck.thoughtdeck_url || deck.raw;
+  return deck.thoughtdeck_url || deck.title + deck.created_at;
 }
 
 export default function MyDecksPage() {
@@ -218,19 +226,26 @@ export default function MyDecksPage() {
     const loaded = (
       await Promise.all(Array.from(files).map(async (file) => parseDeck(await file.text())))
     ).filter((deck): deck is Deck => Boolean(deck));
+
+    if (loaded.length === 0) {
+      setImportMessage("ThoughtDeck形式のファイルが見つかりませんでした");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
     const loadedKeys = loaded.map(deckKey);
     const currentKeys = new Set(decks.map(deckKey));
     const updatedCount = loadedKeys.filter((key) => currentKeys.has(key)).length;
     const addedCount = loaded.length - updatedCount;
-    const totalCount = updatedCount + addedCount;
 
     setDecks((current) => {
       const merged = [...loaded, ...current];
       return Array.from(new Map(merged.map((deck) => [deckKey(deck), deck])).values());
     });
 
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setHighlightedKeys(loadedKeys);
-    setImportMessage(`${totalCount}件更新しました`);
+    setImportMessage(`${addedCount}件追加 / ${updatedCount}件更新`);
     window.setTimeout(() => setHighlightedKeys([]), 1200);
     window.setTimeout(() => setImportMessage(""), 3000);
 
@@ -238,19 +253,12 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
-    console.log("🔥 openDeck called");
+    if (deck.thoughtdeck_url) {
+      window.location.assign(deck.thoughtdeck_url);
+      return;
+    }
 
-    const encoded = encodeDeck({
-      raw: deck.raw,
-      memo: deck.memo,
-      output: deck.output,
-      addedCards: [],
-      starred: [],
-    });
-
-    console.log("👉 URL:", `/thoughtdeck?d=${encoded}`);
-
-    router.push(`/thoughtdeck?d=${encoded}`);
+    console.warn("thoughtdeck_urlがありません");
   };
 
   const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
@@ -332,28 +340,36 @@ export default function MyDecksPage() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 {importMessage && (
                   <span className="text-sm text-blue-300">{importMessage}</span>
                 )}
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
-                >
-                  更新・取り込み
-                </button>
+                <div>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
+                  >
+                    Obsidianから取り込む
+                  </button>
+                  <p className="mt-1 text-xs text-slate-500">
+                    複数のMarkdownファイルを選択できます（ThoughtDeckフォルダ推奨）
+                  </p>
+                </div>
               </div>
             </div>
 
             {decks.length === 0 ? (
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-slate-400">
-                <p>Obsidianで保存したMarkdownファイルを読み込むと、ここにDeckが並びます。</p>
+                <p>Obsidianで保存したMarkdownを取り込むと、ここにDeckが並びます。</p>
                 <button
-                  onClick={() => router.push("/thoughtdeck?new=1")}
+                  onClick={() => fileRef.current?.click()}
                   className="mt-4 rounded-lg border border-blue-400/70 px-4 py-2 text-sm text-blue-100 transition hover:border-blue-300 hover:bg-blue-500/20"
                 >
-                  ＋ 新しく作る
+                  Obsidianから取り込む
                 </button>
+                <p className="mt-2 text-xs text-slate-500">
+                  複数ファイル選択できます
+                </p>
               </div>
             ) : (
               visibleDecks.map((deck) => {
@@ -363,13 +379,13 @@ export default function MyDecksPage() {
                   <article
                     key={key}
                     onClick={() => openDeck(deck)}
-                    className={`group cursor-pointer rounded-xl border border-blue-500/25 p-4 transition hover:border-blue-300/80 hover:bg-blue-500/10 hover:shadow-lg hover:shadow-blue-950/30 ${
+                    className={`group cursor-pointer rounded-xl border border-blue-500/25 p-4 transition transform hover:scale-[1.01] hover:border-blue-300/80 hover:bg-blue-500/10 hover:shadow-lg hover:shadow-blue-950/30 ${
                       highlightedKeys.includes(key) ? "bg-blue-500/25" : "bg-blue-500/5"
                     }`}
                   >
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-3">
-                        <h2 className="min-w-0 truncate text-base font-semibold text-blue-50">
+                        <h2 className="min-w-0 truncate text-sm text-slate-400">
                           {deck.title}
                         </h2>
                         <div className="flex shrink-0 gap-0.5">
@@ -387,9 +403,9 @@ export default function MyDecksPage() {
                           ))}
                         </div>
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">{formatDate(deck.created_at)}</p>
-                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-300">
-                        {deck.trigger ? deck.trigger : "（trigger未設定）"}
+                      <p className="mt-1 text-[11px] text-slate-600">{formatDate(deck.created_at)}</p>
+                      <p className="mt-2 line-clamp-2 text-base font-medium leading-6 text-blue-100">
+                        {deck.trigger ? deck.trigger : "（要約なし）"}
                       </p>
                     </div>
 
