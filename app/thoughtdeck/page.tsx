@@ -535,7 +535,7 @@ export default function Home(props: HomeProps) {
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement;
 
-      if (isTyping) return;
+      if (isTyping && key !== "e") return;
 
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault();
@@ -563,9 +563,13 @@ export default function Home(props: HomeProps) {
         if (expandedEditor === null) {
           setShowLeft(true);
           setSelectedCardId("td-input");
+          setLastActivePanel("td-input");
+          setExpandedEditor("input");
         } else if (expandedEditor === "memo") {
           setShowLeft(true);
           setSelectedCardId("td-input");
+          setLastActivePanel("td-input");
+          setExpandedEditor("input");
         } else {
           openMemoEditor();
         }
@@ -1611,7 +1615,7 @@ export default function Home(props: HomeProps) {
                       >
                          📚
                       </button>
-                      <button onClick={() => { setShowLeft(true); setSelectedCardId("td-input"); }} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
+                      <button onClick={() => { setShowLeft(true); setSelectedCardId("td-input"); setLastActivePanel("td-input"); setExpandedEditor("input"); }} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
                     </div>
                   </div>
 
