@@ -3769,6 +3769,7 @@ export const STORAGE_KEY = "thoughtdeck:data:v9";
 export const LEGACY_STORAGE_KEYS = ["thoughtdeck:v8", "thoughtdeck:v7", "thoughtdeck:v6"];
 export const RESOURCES_STORAGE_KEY = "thoughtdeck:resources:v1";
 export const LEGACY_CUSTOM_LINKS_STORAGE_KEY = "thoughtdeck:custom-links:v1";
+const MYDECKS_KEY = "thoughtdeck:mydecks:v1";
 export const MAX_URL_LENGTH = 3000;
 export const QR_MAX_URL_LENGTH = 2900;
 const ENABLE_FREE_INPUT = true;
@@ -3792,6 +3793,35 @@ export function decodeDeck(value: string): DeckState | null {
     return JSON.parse(json || "{}");
   } catch {
     return null;
+  }
+}
+
+function updateMyDecksLocal(title: string, thoughtdeck_url: string, deckId?: string | null) {
+  if (!thoughtdeck_url || typeof window === "undefined") return;
+
+  const key = deckId || thoughtdeck_url;
+
+  const deckLite = {
+    title,
+    thoughtdeck_url,
+    deckId,
+    created_at: new Date().toISOString(),
+  };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(MYDECKS_KEY) || "[]");
+
+    const map = new Map(
+      saved.map((d: any) => [d.deckId || d.thoughtdeck_url, d]),
+    );
+
+    map.set(key, deckLite);
+
+    localStorage.setItem(
+      MYDECKS_KEY,
+      JSON.stringify(Array.from(map.values())),
+    );
+  } catch {
   }
 }
 
@@ -4760,6 +4790,8 @@ export function useDeckState(props?: UseDeckStateProps) {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
+    const restoreUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
+    updateMyDecksLocal(title, restoreUrl, deckId);
   };
 
   const copyMd = async () => {
@@ -4782,6 +4814,8 @@ export function useDeckState(props?: UseDeckStateProps) {
     await copyTextSafely(md);
     setObsidianToast(`Obsidianに保存します：${fileTitle}`);
     window.setTimeout(() => setObsidianToast(""), 2600);
+    const restoreUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
+    updateMyDecksLocal(title, restoreUrl, deckId);
     window.location.href = url;
   };
 
