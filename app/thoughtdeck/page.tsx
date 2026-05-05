@@ -1679,7 +1679,7 @@ export default function Home(props: HomeProps) {
                     <h2 className="text-[13pt] font-bold text-[var(--td-text)]">メモ</h2>
                     <div className="flex items-center gap-2">
                       {!isReadOnly && (
-                        <button onClick={() => setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"))} className={panelButtonClass}>表示切替 <span className="shortcut">(R)</span></button>
+                        <button onClick={() => setMemoMode((mode) => (mode === "edit" ? "preview" : "edit"))} className={`${panelButtonClass} max-lg:hidden`}>表示切替 <span className="shortcut">(R)</span></button>
                       )}
                     </div>
                   </div>
@@ -1701,21 +1701,38 @@ export default function Home(props: HomeProps) {
                       }`}
                     />
                   ) : (
-                    <section
-                      onClick={() => {
-                        setSelectedCardId("td-memo");
-                        setLastActivePanel("td-memo");
-                        if (isReadOnly) return;
-                        setMemoMode("edit");
-                      }}
-                      className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:h-[30vh] ${
-                        selectedCardId === "td-memo"
-                          ? selectedThoughtClass
-                          : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
-                      }`}
-                    >
-                      {renderMarkdownBlocks(memo, "右上の表示切替で編集できます")}
-                    </section>
+                    <>
+                      <textarea
+                        value={memo}
+                        onChange={(event) => setMemoWithCloudDirty(event.target.value)}
+                        readOnly={isReadOnly}
+                        onFocus={() => {
+                          setSelectedCardId("td-memo");
+                          setLastActivePanel("td-memo");
+                        }}
+                        placeholder="授業中の気づき・違和感・発言メモを書く"
+                        className={`no-scrollbar hidden h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:block max-lg:h-[30vh] ${
+                          selectedCardId === "td-memo"
+                            ? selectedThoughtClass
+                            : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+                        }`}
+                      />
+                      <section
+                        onClick={() => {
+                          setSelectedCardId("td-memo");
+                          setLastActivePanel("td-memo");
+                          if (isReadOnly) return;
+                          setMemoMode("edit");
+                        }}
+                        className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:hidden ${
+                          selectedCardId === "td-memo"
+                            ? selectedThoughtClass
+                            : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
+                        }`}
+                      >
+                        {renderMarkdownBlocks(memo, "右上の表示切替で編集できます")}
+                      </section>
+                    </>
                   )}
                   <p className="mt-2 text-right text-[11pt] text-[var(--td-muted)]">文字数：{memo.length}</p>
                 </aside>
