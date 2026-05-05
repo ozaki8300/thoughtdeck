@@ -199,6 +199,7 @@ export default function Home(props: HomeProps) {
   const [openMobileMenu, setOpenMobileMenu] = useState(false);
   const [openAbout, setOpenAbout] = useState(false);
   const [isRestoredFromUrl, setIsRestoredFromUrl] = useState(false);
+  const [showSaveMenu, setShowSaveMenu] = useState(false);
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
@@ -488,6 +489,16 @@ export default function Home(props: HomeProps) {
   }, [isReadOnly]);
 
   useEffect(() => {
+    const handler = () => setShowSaveMenu(false);
+    if (showSaveMenu) {
+      document.addEventListener("click", handler);
+    }
+    return () => {
+      document.removeEventListener("click", handler);
+    };
+  }, [showSaveMenu]);
+
+  useEffect(() => {
     const shown = localStorage.getItem("td_hint_shown");
 
     if (!shown) {
@@ -582,11 +593,6 @@ export default function Home(props: HomeProps) {
         createShare();
       }
 
-      if (key === "o") {
-        e.preventDefault();
-        saveToObsidian();
-      }
-
       if (key === "t") {
         e.preventDefault();
         setShowTemplatePanel(true);
@@ -636,7 +642,6 @@ export default function Home(props: HomeProps) {
     toggleStar,
     togglePdf,
     createShare,
-    saveToObsidian,
     setShowTemplatePanel,
     changePerspective,
     downloadMd,
@@ -1368,6 +1373,57 @@ export default function Home(props: HomeProps) {
                 </button>
               )}
 
+              {!isReadOnly && (
+                <button
+                  onClick={createShare}
+                  className={topButtonClass}
+                  title="QRで共有"
+                >
+                  共有 <span className="shortcut">(Q)</span>
+                </button>
+              )}
+
+              {!isReadOnly && (
+                <div className="relative">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setShowSaveMenu((v) => !v);
+                    }}
+                    className={topButtonClass}
+                  >
+                    保存 ▼
+                  </button>
+
+                  {showSaveMenu && (
+                    <div
+                      className="absolute right-0 mt-2 w-44 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1 shadow-2xl z-50"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        className="w-full rounded-lg px-3 py-2 text-left text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
+                        onClick={() => {
+                          saveToObsidian();
+                          setShowSaveMenu(false);
+                        }}
+                      >
+                        Obsidianで保存
+                      </button>
+
+                      <button
+                        className="w-full rounded-lg px-3 py-2 text-left text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
+                        onClick={() => {
+                          downloadMd();
+                          setShowSaveMenu(false);
+                        }}
+                      >
+                        MDで保存
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="relative">
                 <button
                   onClick={() => setOpenTopMenu((v) => (v === "more" ? null : "more"))}
@@ -1452,21 +1508,6 @@ export default function Home(props: HomeProps) {
                           {themeLabel(mode)}
                         </button>
                       ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 border-t border-[var(--td-border)] pt-3">
-                    <p className="mb-2 text-[10pt] text-[var(--td-muted)]">保存系</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {!isReadOnly && (
-                        <button onClick={() => { downloadMd(); setOpenTopMenu(null); }} className={topButtonClass}>保存 <span className="shortcut">(X)</span></button>
-                      )}
-                      {!isReadOnly && (
-                        <button onClick={() => { saveToObsidian(); setOpenTopMenu(null); }} className={topButtonClass}>Obsidian <span className="shortcut">(O)</span></button>
-                      )}
-                      {!isReadOnly && (
-                        <button onClick={() => { createShare(); setOpenTopMenu(null); }} disabled={isReadOnly} className={topButtonClass}>QR <span className="shortcut">(Q)</span></button>
-                      )}
                     </div>
                   </div>
 
@@ -1689,15 +1730,6 @@ export default function Home(props: HomeProps) {
           <div className="absolute bottom-full right-2 mb-2 flex w-44 flex-col gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-2 shadow-2xl">
             <button
               onClick={() => {
-                saveToObsidian();
-                setOpenMobileMenu(false);
-              }}
-              className={`${topButtonClass} w-full text-center`}
-            >
-              Obsidian保存
-            </button>
-            <button
-              onClick={() => {
                 setThemeMode((mode) => nextThemeMode(mode));
                 setOpenMobileMenu(false);
               }}
@@ -1737,12 +1769,43 @@ export default function Home(props: HomeProps) {
             メモ
           </button>
 
-          <button
-            onClick={downloadMd}
-            className={`${topButtonClass} flex-1 text-center`}
-          >
-            保存
-          </button>
+          <div className="relative flex-1">
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowSaveMenu((v) => !v);
+              }}
+              className={`${topButtonClass} w-full text-center`}
+            >
+              保存
+            </button>
+            {showSaveMenu && (
+              <div
+                className="absolute right-0 bottom-full mb-2 w-44 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1 shadow-2xl z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="w-full rounded-lg px-3 py-2 text-left text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
+                  onClick={() => {
+                    saveToObsidian();
+                    setShowSaveMenu(false);
+                  }}
+                >
+                  Obsidianで保存
+                </button>
+
+                <button
+                  className="w-full rounded-lg px-3 py-2 text-left text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
+                  onClick={() => {
+                    downloadMd();
+                    setShowSaveMenu(false);
+                  }}
+                >
+                  MDで保存
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={() => setOpenMobileMenu((value) => !value)}
