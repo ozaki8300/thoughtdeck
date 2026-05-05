@@ -3815,16 +3815,18 @@ export function getTimestampSlug(date = new Date()) {
 
 export function sanitizeFileName(value: string) {
   return value
-    .replace(/[\/:*?"<>|#^[\]]/g, "_")
+    .replace(/[\\/:*?"<>|]/g, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .slice(0, 50);
 }
 
 export function getObsidianTitle(title: string, timestamp: string) {
-  const safeTitle = sanitizeFileName(title);
+  const safeTitle = sanitizeFileName(title) || "Untitled Deck";
+  const date = timestamp.slice(0, 10);
   if (!safeTitle || safeTitle === "タイトル" || safeTitle === "タイトル未設定")
-    return timestamp;
-  return `${timestamp}_${safeTitle}`;
+    return `TD_${date}_Untitled Deck.md`;
+  return `TD_${date}_${safeTitle}.md`;
 }
 
 export type ThoughtDeckIdKind = "note" | "group" | "card" | "memo";
@@ -4724,11 +4726,13 @@ export function useDeckState(props?: UseDeckStateProps) {
 
   const downloadMd = () => {
     const md = buildThoughtDeckMd({ raw, memo, output, deckId });
+    const timestamp = getTimestampSlug();
+    const fileName = getObsidianTitle(title, timestamp);
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${new Date().toISOString().slice(0, 10)}_${title}.md`;
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
   };
