@@ -1277,6 +1277,39 @@ export function useDeckState(props?: UseDeckStateProps) {
     setShowLeft(true);
   };
 
+  const insertDefaultTemplate = () => {
+    if (isReadOnly) return;
+
+    const template = `
+# タイトル
+
+## 設問
+- ここに入力
+
+### 左
+@area: left
+- ここに入力
+
+### 中央
+@area: center
+- ここに入力
+
+### 右
+@area: right
+- ここに入力
+
+## まとめ
+- ここに入力
+`.trim();
+
+    setRawWithCloudDirty((prev) => {
+      if (!prev.trim()) return template;
+
+      return `${prev.trim()}\n\n${template}`;
+    });
+    setShowLeft(true);
+  };
+
   const toggleStar = (id: string) => {
     setStarred((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
@@ -1453,6 +1486,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     loadDemo,
     confirmLoadDemo,
     insertTemplate,
+    insertDefaultTemplate,
     toggleStar,
     buildTemplateCopyText,
     copyTemplateBundle,

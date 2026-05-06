@@ -329,6 +329,7 @@ export default function Home(props: HomeProps) {
     clearAll,
     confirmLoadDemo,
     insertTemplate,
+    insertDefaultTemplate,
     toggleStar,
     copyTemplateBundle,
   } = useDeckState(mergedProps);
@@ -1618,6 +1619,15 @@ export default function Home(props: HomeProps) {
                         title="ガイドを開く"
                       >
                          📚
+                      </button>
+                      <button
+                        onClick={() => {
+                          insertDefaultTemplate();
+                        }}
+                        className={panelButtonClass}
+                        title="テンプレートを挿入"
+                      >
+                        Template
                       </button>
                       <button onClick={() => { setShowLeft(true); setSelectedCardId("td-input"); setLastActivePanel("td-input"); setExpandedEditor("input"); }} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
                     </div>
