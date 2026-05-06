@@ -593,9 +593,9 @@ export default function MyDecksPage() {
                   <button
                     key={item.id}
                     onClick={() => window.location.assign(item.thoughtdeck_url)}
-                    className="rounded-lg border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-3 text-left transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                    className="min-w-0 rounded-lg border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-3 text-left transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
                   >
-                    <span className="block truncate text-sm font-semibold text-[var(--td-text)]">
+                    <span className="block min-w-0 truncate text-sm font-semibold text-[var(--td-text)]">
                       {item.title || "Untitled Deck"}
                     </span>
                     <span className="mt-1 block text-xs text-[var(--td-muted)]">
