@@ -63,7 +63,7 @@ export default function Home() {
         >
           <button
             onClick={() => router.push("/thoughtdeck")}
-            className="hidden sm:block ..."
+            className="hidden sm:block rounded-lg border border-blue-400/70 px-6 py-3 hover:bg-blue-500/20 transition"
           >
             思考をはじめる
           </button>
