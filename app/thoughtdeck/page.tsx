@@ -1566,7 +1566,7 @@ export default function Home(props: HomeProps) {
       <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
 
-      <div className="flex h-[calc(100vh-70px)] overflow-hidden max-lg:h-[calc(100vh-70px)] max-lg:flex-col max-lg:overflow-visible">
+      <div className="flex min-h-[calc(100dvh-70px)] overflow-hidden pb-24 max-lg:min-h-[calc(100dvh-70px)] max-lg:flex-col max-lg:overflow-visible">
         <PDFViewer
           pdfInputRef={pdfInputRef}
           pdfUrl={pdfUrl}
@@ -1756,7 +1756,7 @@ export default function Home(props: HomeProps) {
         </PDFViewer>
       </div>
 
-      <footer className="sticky bottom-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 lg:hidden">
+      <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
         {openMobileMenu && (
           <div className="absolute bottom-full right-2 mb-2 flex w-44 flex-col gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-2 shadow-2xl">
             <button
