@@ -712,7 +712,12 @@ export default function MyDecksPage() {
       <div className="mx-auto max-w-6xl">
         <header className="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h1 className="font-sans text-xl font-bold text-[var(--td-text)]">My Decks</h1>
+            <button
+            onClick={() => router.push("/")}
+            className="font-sans text-xl font-bold text-[var(--td-text)] transition hover:text-[var(--td-accent)]"
+            >
+              My Decks
+            </button>
             <p className="font-sans mt-1 text-sm text-[var(--td-muted)]">Think. Deck. Share.</p>
           </div>
 
