@@ -49,6 +49,7 @@ export type DeckState = {
   output: string;
   addedCards: AddedCard[];
   starred: string[];
+  deckId?: string | null;
 };
 
 export const STORAGE_KEY = "thoughtdeck:data:v9";
@@ -82,26 +83,29 @@ export function decodeDeck(value: string): DeckState | null {
   }
 }
 
-function updateMyDecksLocal(title: string, thoughtdeck_url: string, deckId?: string | null) {
-  if (!thoughtdeck_url || typeof window === "undefined") return;
+type MyDecksLocalItem = {
+  title?: string;
+  deck_id?: string | null;
+  created_at?: string;
+};
 
-  const key = deckId || thoughtdeck_url;
+function updateMyDecksLocal(title: string, deckId?: string | null) {
+  if (!deckId || typeof window === "undefined") return;
 
   const deckLite = {
     title,
-    thoughtdeck_url,
-    deckId,
+    deck_id: deckId,
     created_at: new Date().toISOString(),
   };
 
   try {
-    const saved = JSON.parse(localStorage.getItem(MYDECKS_KEY) || "[]");
+    const saved = JSON.parse(localStorage.getItem(MYDECKS_KEY) || "[]") as MyDecksLocalItem[];
 
     const map = new Map(
-      saved.map((d: any) => [d.deckId || d.thoughtdeck_url, d]),
+      saved.map((d) => [d.deck_id, d]),
     );
 
-    map.set(key, deckLite);
+    map.set(deckId, deckLite);
 
     localStorage.setItem(
       MYDECKS_KEY,
@@ -168,10 +172,9 @@ export function sanitizeFileName(value: string) {
 
 export function getObsidianTitle(title: string, timestamp: string) {
   const safeTitle = sanitizeFileName(title) || "Untitled Deck";
-  const date = timestamp.slice(0, 10);
   if (!safeTitle || safeTitle === "タイトル" || safeTitle === "タイトル未設定")
-    return `TD_${date}_Untitled Deck.md`;
-  return `TD_${date}_${safeTitle}.md`;
+    return `TD_${timestamp}_Untitled Deck.md`;
+  return `TD_${timestamp}_${safeTitle}.md`;
 }
 
 export type ThoughtDeckIdKind = "note" | "group" | "card" | "memo";
@@ -334,10 +337,18 @@ export function buildRestoreUrl(
   output: string,
   addedCards: AddedCard[],
   starred: string[],
+  deckId?: string | null,
 ) {
   if (typeof window === "undefined") return "";
   const base = `${window.location.origin}${window.location.pathname}`;
-  const deck: DeckState = { raw, memo, output, addedCards, starred };
+  const deck: DeckState = {
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+    deckId,
+  };
   return `${base}?d=${encodeDeck(deck)}`;
 }
 
@@ -790,7 +801,31 @@ export function useDeckState(props?: UseDeckStateProps) {
     if (typeof window === "undefined") return;
 
     const params = new URLSearchParams(window.location.search);
+    const resume = params.get("resume");
     const d = params.get("d");
+
+    if (resume) {
+      const saved = localStorage.getItem(STORAGE_KEY);
+
+      if (saved) {
+        try {
+          const deck = JSON.parse(saved) as DeckState;
+
+          if (deck.deckId === resume) {
+            setRaw(deck.raw || blankRaw);
+            setMemo(deck.memo || "");
+            setOutput(deck.output || "");
+            setAddedCards(deck.addedCards || []);
+            setStarred(deck.starred || []);
+            setDeckId(deck.deckId ?? null);
+
+            return;
+          }
+        } catch {
+          console.error("resume restore error");
+        }
+      }
+    }
 
     if (d) {
       try {
@@ -798,15 +833,22 @@ export function useDeckState(props?: UseDeckStateProps) {
         if (!json) return;
 
         const snapshot = JSON.parse(json) as Partial<DeckState>;
+        const migratedDeckId =
+          snapshot.deckId ??
+          generatePortableId("note");
 
         setRaw(snapshot.raw ?? "");
         setMemo(snapshot.memo ?? "");
         setOutput(snapshot.output ?? "");
         setAddedCards(snapshot.addedCards ?? []);
         setStarred(snapshot.starred ?? []);
+        setDeckId(migratedDeckId);
         setShowLeft(false);
         setShowRight(false);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ...snapshot, deckId: migratedDeckId }),
+        );
         return;
       } catch (e) {
         console.error("restore error:", e);
@@ -822,6 +864,7 @@ export function useDeckState(props?: UseDeckStateProps) {
         setOutput(deck.output || "");
         setAddedCards(deck.addedCards || []);
         setStarred(deck.starred || []);
+        setDeckId(deck.deckId ?? null);
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -914,12 +957,12 @@ export function useDeckState(props?: UseDeckStateProps) {
     const timer = window.setTimeout(() => {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ raw, memo, output, addedCards, starred }),
+        JSON.stringify({ raw, memo, output, addedCards, starred, deckId }),
       );
       setSaveStatus("保存済");
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [raw, memo, output, addedCards, starred]);
+  }, [raw, memo, output, addedCards, starred, deckId]);
 
   useEffect(() => {
     if (!draggingLeft) return;
@@ -1055,6 +1098,7 @@ export function useDeckState(props?: UseDeckStateProps) {
         output,
         addedCards,
         starred,
+        id,
       );
 
       setShareUrl(url);
@@ -1070,7 +1114,17 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const downloadMd = () => {
-    const md = buildThoughtDeckMd({ raw, memo, output, deckId });
+    const activeDeckId =
+      deckId ?? generatePortableId("note");
+
+    setDeckId(activeDeckId);
+
+    const md = buildThoughtDeckMd({
+      raw,
+      memo,
+      output,
+      deckId: activeDeckId,
+    });
     const timestamp = getTimestampSlug();
     const fileName = getObsidianTitle(title, timestamp);
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
@@ -1080,8 +1134,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
-    const restoreUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
-    updateMyDecksLocal(title, restoreUrl, deckId);
+    updateMyDecksLocal(title, activeDeckId);
   };
 
   const copyMd = async () => {
@@ -1093,19 +1146,29 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const saveToObsidian = async () => {
-    const md = buildThoughtDeckMd({ raw, memo, output, deckId });
+    const activeDeckId =
+      deckId ?? generatePortableId("note");
+
+    setDeckId(activeDeckId);
+
+    const md = buildThoughtDeckMd({
+      raw,
+      memo,
+      output,
+      deckId: activeDeckId,
+    });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
     const filePath = `ThoughtDeck/${fileTitle}`;
-    const url = `obsidian://new?file=${encodeURIComponent(filePath)}&clipboard=true&append=true`;
+    const url = `obsidian://new?file=${encodeURIComponent(filePath)}&clipboard=true`;
 
     // 長いMarkdown本文をURIに直接詰めると、ブラウザやOSのURI長制限でObsidianが起動しないことがある。
     // 本文はクリップボードに置き、Obsidian URIの clipboard=true で取り込ませる。
     await copyTextSafely(md);
     setObsidianToast(`Obsidianに保存します：${fileTitle}`);
     window.setTimeout(() => setObsidianToast(""), 2600);
-    const restoreUrl = buildRestoreUrl(raw, memo, output, addedCards, starred);
-    updateMyDecksLocal(title, restoreUrl, deckId);
+    updateMyDecksLocal(title, activeDeckId);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     window.location.href = url;
   };
 

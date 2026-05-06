@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Deck = {
+  deck_id: string;
   title: string;
   created_at: string;
-  thoughtdeck_url: string;
   star: number;
   trigger: string;
+};
+
+type SavedDeck = Partial<Deck> & {
+  deckId?: string | null;
 };
 
 type QrHistoryItem = {
@@ -27,15 +31,20 @@ function loadSavedDecks() {
 
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved
-      ? (JSON.parse(saved) as Deck[]).map((deck) => ({
-          title: deck.title,
-          created_at: deck.created_at,
-          thoughtdeck_url: deck.thoughtdeck_url,
-          star: deck.star ?? 0,
-          trigger: deck.trigger ?? "",
-        }))
-      : [];
+    const decks = JSON.parse(saved || "[]") as SavedDeck[];
+    if (!saved) return [];
+
+    const normalized = decks.map((deck) => ({
+      deck_id: deck.deck_id ?? deck.deckId ?? "",
+      title: deck.title ?? "Untitled Deck",
+      created_at: deck.created_at ?? "",
+      star: deck.star ?? 0,
+      trigger: deck.trigger ?? "",
+    }));
+
+    return Array.from(
+      new Map(normalized.map((deck) => [deckKey(deck), deck])).values(),
+    );
   } catch {
     return [];
   }
@@ -74,16 +83,79 @@ function getYamlValue(yaml: string, key: string) {
 
 function getYamlBlock(yaml: string, key: "raw" | "memo" | "output") {
   const match = yaml.match(
-    new RegExp(`^  ${key}: \\|\\n([\\s\\S]*?)(?=\\n  \\w+: \\||\\n\\w|$)`, "m"),
+    new RegExp(`^${key}: \\|\\n([\\s\\S]*?)(?=\\n\\w|$)`, "m"),
   );
 
   if (!match) return "";
 
   return match[1]
     .split("\n")
-    .map((line) => line.replace(/^    /, ""))
+    .map((line) => line.replace(/^  /, ""))
     .join("\n")
     .trimEnd();
+}
+
+function getYamlRowBlock(
+  yaml: string,
+  key: "raw" | "memo" | "output",
+) {
+  const lines = yaml.split("\n");
+
+  let inRow = false;
+  let capture = false;
+
+  const result: string[] = [];
+
+  for (const line of lines) {
+    // row開始
+    if (line.trim() === "row:") {
+      inRow = true;
+      continue;
+    }
+
+    if (!inRow) continue;
+
+    // row終了（トップレベルkey）
+    if (
+      !line.startsWith("  ") &&
+      /^[a-zA-Z0-9_-]+:/.test(line)
+    ) {
+      break;
+    }
+
+    // key: |
+    if (
+      new RegExp(`^  ${key}: \\|$`).test(line)
+    ) {
+      capture = true;
+      continue;
+    }
+
+    // key: ""
+    const inline = line.match(
+      new RegExp(`^  ${key}:\\s*"(.*)"$`),
+    );
+
+    if (inline) {
+      return inline[1];
+    }
+
+    // block終了
+    if (
+      capture &&
+      line.startsWith("  ") &&
+      !line.startsWith("    ")
+    ) {
+      break;
+    }
+
+    // block本文
+    if (capture) {
+      result.push(line.replace(/^    /, ""));
+    }
+  }
+
+  return result.join("\n").trim();
 }
 
 function getBodySection(text: string, label: string) {
@@ -128,15 +200,28 @@ function getMemoPreview(memo: string) {
   return line ? line.replace(/^#{1,6}\s+/, "").trim() : "（メモなし）";
 }
 
-function generateTrigger(raw: string, memo: string) {
-  const source = memo.trim() ? memo : raw;
-  const trigger = source
-    .split("\n")
-    .map((line) => line.replace(/^#{1,6}\s+/, "").trim())
-    .find(Boolean);
+function generateTrigger(raw: string, memo: string, output: string) {
+  const clean = (text: string) =>
+    text
+      .replace(/\n/g, " ")
+      .replace(/[#\-*]/g, "")
+      .trim();
 
-  if (!trigger) return "（要約なし）";
-  return trigger.length > 50 ? `${trigger.slice(0, 50)}…` : trigger;
+  // 投稿優先
+  if (output?.trim()) {
+    return clean(output).slice(0, 60);
+  }
+
+  // fallback
+  if (memo?.trim()) {
+    return clean(memo).slice(0, 60);
+  }
+
+  if (raw?.trim()) {
+    return clean(raw).slice(0, 60);
+  }
+
+  return "（要約なし）";
 }
 
 function formatDate(value: string) {
@@ -161,8 +246,18 @@ function parseDeck(text: string): Deck | null {
   const type = getYamlValue(yaml, "type") || getYamlValue(yaml, "format");
   if (type !== "thoughtdeck") return null;
 
-  const raw = getYamlBlock(yaml, "raw");
-  const memo = getYamlBlock(yaml, "memo");
+  const raw =
+    getYamlRowBlock(yaml, "raw") ||
+    getYamlBlock(yaml, "raw") ||
+    getBodySection(text, "Raw");
+  const memo =
+    getYamlRowBlock(yaml, "memo") ||
+    getYamlBlock(yaml, "memo") ||
+    getBodySection(text, "Memo");
+  const output =
+    getYamlRowBlock(yaml, "output") ||
+    getYamlBlock(yaml, "output") ||
+    getBodySection(text, "Output");
 
   const title =
     getYamlValue(yaml, "title") || getTitleFromRaw(raw);
@@ -171,20 +266,20 @@ function parseDeck(text: string): Deck | null {
     getYamlValue(yaml, "created_at") ||
     new Date().toISOString();
 
-  const thoughtdeck_url =
-    getYamlValue(yaml, "thoughtdeck_url");
+  const deck_id =
+    getYamlValue(yaml, "deck_id");
 
   return {
+    deck_id,
     title,
     created_at,
-    thoughtdeck_url,
     star: 0,
-    trigger: generateTrigger(raw, memo),
+    trigger: generateTrigger(raw, memo, output),
   };
 }
 
 function deckKey(deck: Deck) {
-  return deck.thoughtdeck_url || deck.title + deck.created_at;
+  return deck.deck_id || deck.title + deck.created_at;
 }
 
 export default function MyDecksPage() {
@@ -236,8 +331,25 @@ export default function MyDecksPage() {
     const addedCount = loaded.length - updatedCount;
 
     setDecks((current) => {
-      const merged = [...loaded, ...current];
-      return Array.from(new Map(merged.map((deck) => [deckKey(deck), deck])).values());
+      const next = [...current];
+
+      for (const imported of loaded) {
+        const index = next.findIndex(
+          (deck) =>
+            (deck.deck_id &&
+              imported.deck_id &&
+              deck.deck_id === imported.deck_id) ||
+            deck.title === imported.title,
+        );
+
+        if (index >= 0) {
+          next[index] = imported;
+        } else {
+          next.push(imported);
+        }
+      }
+
+      return next;
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -250,19 +362,11 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
-    if (!deck.thoughtdeck_url) return;
+    if (!deck.deck_id) return;
 
-    let url = deck.thoughtdeck_url;
-
-    // localhost対策（本番用）
-    if (url.includes("localhost")) {
-      url = url.replace(
-        "http://localhost:3000",
-        "https://www.thoughtdeck.app"
-      );
-    }
-
-    window.location.assign(url);
+    window.location.assign(
+      `/thoughtdeck?resume=${deck.deck_id}`,
+    );
   };
 
   const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {

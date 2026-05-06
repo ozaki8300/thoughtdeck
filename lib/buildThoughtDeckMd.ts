@@ -67,7 +67,14 @@ export function buildThoughtDeckMd({
   const userId = getUserId();
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
-  const thoughtdeckUrl = buildRestoreUrl(raw, memo, output, [], []);
+  const thoughtdeckUrl = buildRestoreUrl(
+    raw,
+    memo,
+    output,
+    [],
+    [],
+    deckIdFinal,
+  );
 
   return `---
 format: thoughtdeck
