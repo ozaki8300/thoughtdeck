@@ -460,7 +460,7 @@ export default function MyDecksPage() {
               isDragging ? "border-[var(--td-accent-border)] bg-[var(--td-hover)]" : ""
             }`}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex gap-2">
                 <button
                   onClick={() => setFilterMode("all")}
@@ -488,7 +488,7 @@ export default function MyDecksPage() {
                 <span className="text-sm text-[var(--td-accent)]">{importMessage}</span>
               )}
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {hasDraft && (
                   <button
                     onClick={() => router.push("/thoughtdeck")}
