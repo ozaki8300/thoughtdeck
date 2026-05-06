@@ -871,7 +871,10 @@ export default function Home(props: HomeProps) {
               <h2 className="text-[13pt] font-bold text-[var(--td-text)]">投稿文</h2>
             </div>
             {!isReadOnly && (
-              <button onClick={openOutputComposer} className="rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]">
+              <button
+                onClick={openOutputComposer}
+                className="hidden lg:block rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]"
+              >
                 編集 <span className="shortcut">(E)</span>
               </button>
             )}
