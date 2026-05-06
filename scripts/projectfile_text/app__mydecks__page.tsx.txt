@@ -555,8 +555,8 @@ export default function MyDecksPage() {
                             <button
                               key={value}
                               onClick={(event) => updateStar(event, key, value)}
-                              className={`text-sm transition hover:text-[var(--td-accent)] ${
-                                value <= deck.star ? "text-[var(--td-accent)]" : "text-[var(--td-muted)]"
+                              className={`text-sm transition hover:text-yellow-300 ${
+                                value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
                               }`}
                               title={`${value} stars`}
                             >

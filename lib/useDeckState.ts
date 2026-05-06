@@ -86,15 +86,49 @@ export function decodeDeck(value: string): DeckState | null {
 type MyDecksLocalItem = {
   title?: string;
   deck_id?: string | null;
+  trigger?: string;
   created_at?: string;
 };
 
-function updateMyDecksLocal(title: string, deckId?: string | null) {
+function generateTriggerPreview(
+  raw: string,
+  memo: string,
+  output: string,
+) {
+  const clean = (text: string) =>
+    text
+      .replace(/\n/g, " ")
+      .replace(/[#\-*]/g, "")
+      .trim();
+
+  // 投稿優先
+  if (output?.trim()) {
+    return clean(output).slice(0, 60);
+  }
+
+  // fallback
+  if (memo?.trim()) {
+    return clean(memo).slice(0, 60);
+  }
+
+  if (raw?.trim()) {
+    return clean(raw).slice(0, 60);
+  }
+
+  return "（要約なし）";
+}
+
+function updateMyDecksLocal(
+  title: string,
+  deckId?: string | null,
+  trigger?: string,
+) {
   if (!deckId || typeof window === "undefined") return;
 
   const deckLite = {
     title,
     deck_id: deckId,
+    trigger,
     created_at: new Date().toISOString(),
   };
 
@@ -1134,7 +1168,11 @@ export function useDeckState(props?: UseDeckStateProps) {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
-    updateMyDecksLocal(title, activeDeckId);
+    updateMyDecksLocal(
+      title,
+      activeDeckId,
+      generateTriggerPreview(raw, memo, output),
+    );
   };
 
   const copyMd = async () => {
@@ -1167,7 +1205,11 @@ export function useDeckState(props?: UseDeckStateProps) {
     await copyTextSafely(md);
     setObsidianToast(`Obsidianに保存します：${fileTitle}`);
     window.setTimeout(() => setObsidianToast(""), 2600);
-    updateMyDecksLocal(title, activeDeckId);
+    updateMyDecksLocal(
+      title,
+      activeDeckId,
+      generateTriggerPreview(raw, memo, output),
+    );
     await new Promise((resolve) => setTimeout(resolve, 50));
     window.location.href = url;
   };
