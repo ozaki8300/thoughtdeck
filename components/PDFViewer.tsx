@@ -71,10 +71,10 @@ export function PDFViewer({
 
     return (
       <aside
-        className="hidden shrink-0 overflow-hidden border-[var(--td-border)] bg-[var(--td-panel)] lg:flex lg:w-[var(--pdf-width)] lg:flex-col"
+        className="hidden min-h-0 shrink-0 overflow-hidden border-[var(--td-border)] bg-[var(--td-panel)] lg:flex lg:w-[var(--pdf-width)] lg:flex-col"
         style={{ "--pdf-width": `${pdfWidth}px` } as CSSProperties}
       >
-        <div className="flex min-h-[52px] items-center gap-2 overflow-x-auto border-b border-[var(--td-border)] px-3 py-2">
+        <div className="flex min-h-[52px] shrink-0 items-center gap-2 overflow-x-auto border-b border-[var(--td-border)] px-3 py-2">
           <div className="min-w-[160px] flex-1">
             <p className="truncate text-[10.5pt] font-bold text-[var(--td-text)]">
               PDF
@@ -124,7 +124,7 @@ export function PDFViewer({
         <iframe
           key={`${pdfUrl}-${pdfPage}`}
           src={pdfFrameSrc}
-          className={`min-h-0 flex-1 bg-white ${draggingPdf ? "pointer-events-none" : ""}`}
+          className={`min-h-0 w-full flex-1 bg-white ${draggingPdf ? "pointer-events-none" : ""}`}
           title="ThoughtDeck PDF Viewer"
         />
       </aside>
@@ -174,8 +174,8 @@ export function PDFViewer({
           : "PDFとカードを見ながら、投稿文を書きます...";
 
     return (
-      <section className="no-scrollbar flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--td-bg)]">
-        <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-3 border-b border-[var(--td-border)] px-4 py-2">
+      <section className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--td-bg)]">
+        <div className="flex min-h-[54px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--td-border)] px-4 py-2">
           <div className="flex items-center gap-2">
             <span className="text-[10.5pt] text-[var(--td-muted)]">表示</span>
             <button onClick={() => onPdfWorkModeChange("thought")} className={pdfModeButtonClass("thought")}>思考</button>
@@ -202,7 +202,7 @@ export function PDFViewer({
               value={editorValue}
               onChange={(event) => setEditorValue(event.target.value)}
               placeholder={editorPlaceholder}
-              className={`no-scrollbar min-h-0 flex-1 resize-none rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-editor)] p-5 text-[var(--td-text)] outline-none focus:border-[var(--td-accent-border)] ${
+              className={`no-scrollbar min-h-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-[var(--td-border-strong)] bg-[var(--td-editor)] p-5 text-[var(--td-text)] outline-none focus:border-[var(--td-accent-border)] ${
                 pdfWorkMode === "input" ? "font-mono text-[11.5pt] leading-7" : "text-[12.5pt] leading-8"
               }`}
             />

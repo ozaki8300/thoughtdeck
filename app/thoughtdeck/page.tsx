@@ -834,7 +834,7 @@ export default function Home(props: HomeProps) {
   };
 
   const renderThoughtArea = () => (
-    <section className="no-scrollbar flex-1 overflow-auto p-4 max-lg:overflow-visible max-lg:p-4">
+    <section className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto p-4 max-lg:overflow-visible max-lg:p-4">
       
       <div className="mb-3 px-1 text-[10.5pt] text-[var(--td-muted)]">
         ① 書く（素材）→ ② 並べる（カード）→ ③ 選ぶ（★）→ ④ 投稿する
@@ -1111,7 +1111,7 @@ export default function Home(props: HomeProps) {
     "rounded-lg border border-[var(--td-border-strong)] px-3 py-1.5 text-[11pt] text-[var(--td-text-soft)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]";
 
   return (
-    <main data-theme={themeMode} className="td-app-enter min-h-screen bg-[var(--td-bg)] text-[var(--td-text)] lg:h-screen lg:overflow-hidden">
+    <main data-theme={themeMode} className="td-app-enter flex min-h-screen flex-col bg-[var(--td-bg)] text-[var(--td-text)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
       <div aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-[90] h-[2px] w-full overflow-hidden">
         <div className="td-startup-scan h-full w-[34vw] rounded-full bg-gradient-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_18px_rgba(96,165,250,0.9)]" />
       </div>
@@ -1310,7 +1310,7 @@ export default function Home(props: HomeProps) {
         </div>
       )}
 
-      <header className="flex min-h-[70px] items-center border-b border-[var(--td-border)] px-6 py-3">
+      <header className="flex min-h-[70px] shrink-0 items-center border-b border-[var(--td-border)] px-6 py-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-[20px] font-bold leading-tight">
             <a
@@ -1569,7 +1569,7 @@ export default function Home(props: HomeProps) {
       <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
 
-      <div className="flex min-h-[calc(100dvh-70px)] overflow-hidden pb-24 max-lg:min-h-[calc(100dvh-70px)] max-lg:flex-col max-lg:overflow-visible">
+      <div className="flex min-h-0 flex-1 overflow-hidden max-lg:flex-col max-lg:overflow-visible">
         <PDFViewer
           pdfInputRef={pdfInputRef}
           pdfUrl={pdfUrl}
@@ -1603,7 +1603,7 @@ export default function Home(props: HomeProps) {
             {!isReadOnly && showLeft && (
               <>
                 <aside
-                  className="no-scrollbar w-full shrink-0 overflow-auto border-r border-[var(--td-border)] p-5 max-lg:border-b max-lg:border-r-0 lg:w-[var(--left-width)]"
+                  className="no-scrollbar flex min-h-0 min-w-0 w-full shrink-0 flex-col overflow-hidden border-r border-[var(--td-border)] p-5 max-lg:border-b max-lg:border-r-0 max-lg:overflow-visible lg:w-[var(--left-width)]"
                   style={{ "--left-width": `${leftWidth}px` } as CSSProperties}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -1653,7 +1653,7 @@ export default function Home(props: HomeProps) {
                       setLastActivePanel("td-input");
                     }}
                     placeholder="思考の素材を書く（授業メモ・気づき・仮説など）"
-                    className="no-scrollbar h-[calc(100vh-205px)] w-full resize-none rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[30vh]"
+                    className="no-scrollbar min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-4 font-mono text-[11pt] leading-6 outline-none focus:border-[var(--td-border-strong)] max-lg:h-[30vh] max-lg:flex-none"
                   />
                 </aside>
                 <button
@@ -1689,7 +1689,7 @@ export default function Home(props: HomeProps) {
                 </button>
                 <aside
                   ref={memoRef}
-                  className="no-scrollbar w-full shrink-0 overflow-auto border-l border-[var(--td-border)] p-5 max-lg:border-l-0 max-lg:border-t lg:w-[var(--right-width)]"
+                  className="no-scrollbar flex min-h-0 min-w-0 w-full shrink-0 flex-col overflow-hidden border-l border-[var(--td-border)] p-5 max-lg:border-l-0 max-lg:border-t max-lg:overflow-visible lg:w-[var(--right-width)]"
                   style={{ "--right-width": `${rightWidth}px` } as CSSProperties}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -1711,7 +1711,7 @@ export default function Home(props: HomeProps) {
                         setLastActivePanel("td-memo");
                       }}
                       placeholder="授業中の気づき・違和感・発言メモを書く"
-                      className={`no-scrollbar h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:h-[30vh] ${
+                      className={`no-scrollbar min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:h-[30vh] max-lg:flex-none ${
                         selectedCardId === "td-memo"
                           ? selectedThoughtClass
                           : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
@@ -1728,7 +1728,7 @@ export default function Home(props: HomeProps) {
                           setLastActivePanel("td-memo");
                         }}
                         placeholder="授業中の気づき・違和感・発言メモを書く"
-                        className={`no-scrollbar hidden h-[calc(100vh-150px)] w-full resize-none overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:block max-lg:h-[30vh] ${
+                        className={`no-scrollbar hidden min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] outline-none transition max-lg:block max-lg:h-[30vh] max-lg:flex-none ${
                           selectedCardId === "td-memo"
                             ? selectedThoughtClass
                             : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
@@ -1741,7 +1741,7 @@ export default function Home(props: HomeProps) {
                           if (isReadOnly) return;
                           setMemoMode("edit");
                         }}
-                        className={`no-scrollbar h-[calc(100vh-150px)] w-full cursor-pointer overflow-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:hidden ${
+                        className={`no-scrollbar min-h-0 w-full flex-1 cursor-pointer overflow-y-auto rounded-xl border p-4 text-[11pt] leading-6 text-[var(--td-text)] transition max-lg:hidden ${
                           selectedCardId === "td-memo"
                             ? selectedThoughtClass
                             : "border-[var(--td-border)] bg-[var(--td-surface-soft)] hover:border-[var(--td-border-strong)]"
@@ -1759,7 +1759,7 @@ export default function Home(props: HomeProps) {
         </PDFViewer>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
+      <footer className="relative z-40 shrink-0 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
         {openMobileMenu && (
           <div className="absolute bottom-full right-2 mb-2 flex w-44 flex-col gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-2 shadow-2xl">
             <button
