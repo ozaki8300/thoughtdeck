@@ -2374,8 +2374,11 @@ export default function Home(props: HomeProps) {
               {!isReadOnly && (
                 <button
                   onClick={() => {
-                    setShowLeft(true);
-                    setSelectedCardId("td-input");
+                    setShowLeft((v) => !v);
+
+                    if (!showLeft) {
+                      setSelectedCardId("td-input");
+                    }
                   }}
                   className={`${topButtonClass} ${showLeft ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]" : ""}`}
                   title="素材欄を表示／非表示"
