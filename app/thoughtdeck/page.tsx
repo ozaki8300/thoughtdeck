@@ -530,6 +530,15 @@ export default function Home(props: HomeProps) {
       if (e.isComposing) return;
 
       const key = e.key.toLowerCase();
+      const isModifierShortcut = e.ctrlKey || e.metaKey;
+      const allowModifierShortcuts =
+        (isModifierShortcut && key === "e") ||
+        (isModifierShortcut && key === "enter");
+
+      if (isModifierShortcut && !allowModifierShortcuts) {
+        return;
+      }
+
       if (isReadOnly) {
         if (!["m", "d"].includes(key)) return;
       }
@@ -538,7 +547,7 @@ export default function Home(props: HomeProps) {
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement;
 
-      if (isTyping && !(e.ctrlKey || e.metaKey)) return;
+      if (isTyping && !isModifierShortcut) return;
 
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault();
@@ -560,7 +569,7 @@ export default function Home(props: HomeProps) {
         openOutputComposer();
       }
 
-      if ((e.ctrlKey || e.metaKey) && key === "e") {
+      if (isModifierShortcut && key === "e") {
         e.preventDefault();
 
         if (expandedEditor === null) {
@@ -629,7 +638,7 @@ export default function Home(props: HomeProps) {
         setShowShortcutHelp(false);
       }
 
-      if ((e.ctrlKey || e.metaKey) && key === "enter") {
+      if (isModifierShortcut && key === "enter") {
         setExpandedEditor(null);
       }
     };
