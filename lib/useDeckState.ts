@@ -1168,11 +1168,11 @@ export function useDeckState(props?: UseDeckStateProps) {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
-    updateMyDecksLocal(
-      title,
-      activeDeckId,
-      generateTriggerPreview(raw, memo, output),
-    );
+    // updateMyDecksLocal(
+    //   title,
+    //   activeDeckId,
+    //   generateTriggerPreview(raw, memo, output),
+    // );
   };
 
   const copyMd = async () => {
@@ -1205,11 +1205,11 @@ export function useDeckState(props?: UseDeckStateProps) {
     await copyTextSafely(md);
     setObsidianToast(`Obsidianに保存します：${fileTitle}`);
     window.setTimeout(() => setObsidianToast(""), 2600);
-    updateMyDecksLocal(
-      title,
-      activeDeckId,
-      generateTriggerPreview(raw, memo, output),
-    );
+    // updateMyDecksLocal(
+    //   title,
+    //   activeDeckId,
+    //   generateTriggerPreview(raw, memo, output),
+    // );
     await new Promise((resolve) => setTimeout(resolve, 50));
     window.location.href = url;
   };
