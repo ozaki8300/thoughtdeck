@@ -11,6 +11,9 @@ type BuildThoughtDeckMdArgs = {
   deckId: string | null;
 };
 
+const CREATED_AT_STORAGE_KEY = "thoughtdeck:created-at:v1";
+const DECK_STATE_STORAGE_KEY = "thoughtdeck:data:v9";
+
 function getUserId() {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem("td_user_id");
@@ -36,6 +39,43 @@ function getDeckId(existingId?: string | null) {
   }
 
   return id;
+}
+
+function getCreatedAt(deckId: string, fallback: string) {
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    const saved = localStorage.getItem(CREATED_AT_STORAGE_KEY);
+    const createdAtByDeck = JSON.parse(saved || "{}") as Record<string, string>;
+    const existing = createdAtByDeck[deckId];
+
+    if (existing) return existing;
+
+    const currentDeck = JSON.parse(
+      localStorage.getItem(DECK_STATE_STORAGE_KEY) || "{}",
+    ) as {
+      deckId?: string | null;
+      createdAt?: string;
+      created_at?: string;
+    };
+    const restoredCreatedAt =
+      currentDeck.deckId === deckId
+        ? currentDeck.createdAt || currentDeck.created_at
+        : "";
+
+    if (restoredCreatedAt) {
+      createdAtByDeck[deckId] = restoredCreatedAt;
+      localStorage.setItem(CREATED_AT_STORAGE_KEY, JSON.stringify(createdAtByDeck));
+      return restoredCreatedAt;
+    }
+
+    createdAtByDeck[deckId] = fallback;
+    localStorage.setItem(CREATED_AT_STORAGE_KEY, JSON.stringify(createdAtByDeck));
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
 }
 
 function yamlBlock(value: string | null | undefined) {
@@ -69,6 +109,7 @@ export function buildThoughtDeckMd({
   const userId = getUserId();
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
+  const createdAt = getCreatedAt(deckIdFinal, now);
   const thoughtdeckUrl = buildRestoreUrl(
     raw,
     memo,
@@ -85,7 +126,7 @@ version: 1
 user_id: ${userId}
 deck_id: ${deckIdFinal}
 
-created_at: "${yamlSafe(now)}"
+created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"
 
 thoughtdeck_url: ${thoughtdeckUrl}

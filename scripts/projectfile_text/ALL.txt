@@ -296,6 +296,7 @@ type Deck = {
   user_id: string;
   title: string;
   created_at: string;
+  updated_at: string;
   star: number;
   trigger: string;
   keywords: string[];
@@ -448,6 +449,7 @@ function loadSavedDecks() {
       user_id: deck.user_id ?? "",
       title: deck.title ?? "Untitled Deck",
       created_at: deck.created_at ?? "",
+      updated_at: deck.updated_at ?? deck.created_at ?? "",
       star: deck.star ?? 0,
       trigger: deck.trigger ?? "",
       keywords: deck.keywords ?? [],
@@ -690,6 +692,9 @@ function parseDeck(text: string): Deck | null {
   const created_at =
     getYamlValue(yaml, "created_at") ||
     new Date().toISOString();
+  const updated_at =
+    getYamlValue(yaml, "updated_at") ||
+    created_at;
   const user_id =
     getYamlValue(yaml, "user_id");
   const keywords: string[] = [];
@@ -701,6 +706,7 @@ function parseDeck(text: string): Deck | null {
     user_id,
     title,
     created_at,
+    updated_at,
     star: 0,
     trigger: generateTrigger(raw, memo, output),
     keywords,
@@ -832,7 +838,21 @@ export default function MyDecksPage() {
         );
 
         if (index >= 0) {
-          next[index] = imported;
+          const currentDeck = next[index];
+
+          const currentTime = new Date(
+            currentDeck.updated_at ||
+              currentDeck.created_at,
+          ).getTime();
+
+          const importedTime = new Date(
+            imported.updated_at ||
+              imported.created_at,
+          ).getTime();
+
+          if (importedTime >= currentTime) {
+            next[index] = imported;
+          }
         } else {
           next.push(imported);
         }
@@ -985,6 +1005,8 @@ export default function MyDecksPage() {
       addedCards: [],
       starred: [],
       deckId: deck.deck_id,
+      createdAt: deck.created_at,
+      updatedAt: deck.updated_at,
     });
 
     window.location.assign(`/thoughtdeck?d=${encoded}`);
@@ -3257,6 +3279,9 @@ type BuildThoughtDeckMdArgs = {
   deckId: string | null;
 };
 
+const CREATED_AT_STORAGE_KEY = "thoughtdeck:created-at:v1";
+const DECK_STATE_STORAGE_KEY = "thoughtdeck:data:v9";
+
 function getUserId() {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem("td_user_id");
@@ -3282,6 +3307,43 @@ function getDeckId(existingId?: string | null) {
   }
 
   return id;
+}
+
+function getCreatedAt(deckId: string, fallback: string) {
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    const saved = localStorage.getItem(CREATED_AT_STORAGE_KEY);
+    const createdAtByDeck = JSON.parse(saved || "{}") as Record<string, string>;
+    const existing = createdAtByDeck[deckId];
+
+    if (existing) return existing;
+
+    const currentDeck = JSON.parse(
+      localStorage.getItem(DECK_STATE_STORAGE_KEY) || "{}",
+    ) as {
+      deckId?: string | null;
+      createdAt?: string;
+      created_at?: string;
+    };
+    const restoredCreatedAt =
+      currentDeck.deckId === deckId
+        ? currentDeck.createdAt || currentDeck.created_at
+        : "";
+
+    if (restoredCreatedAt) {
+      createdAtByDeck[deckId] = restoredCreatedAt;
+      localStorage.setItem(CREATED_AT_STORAGE_KEY, JSON.stringify(createdAtByDeck));
+      return restoredCreatedAt;
+    }
+
+    createdAtByDeck[deckId] = fallback;
+    localStorage.setItem(CREATED_AT_STORAGE_KEY, JSON.stringify(createdAtByDeck));
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
 }
 
 function yamlBlock(value: string | null | undefined) {
@@ -3315,6 +3377,7 @@ export function buildThoughtDeckMd({
   const userId = getUserId();
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
+  const createdAt = getCreatedAt(deckIdFinal, now);
   const thoughtdeckUrl = buildRestoreUrl(
     raw,
     memo,
@@ -3331,7 +3394,7 @@ version: 1
 user_id: ${userId}
 deck_id: ${deckIdFinal}
 
-created_at: "${yamlSafe(now)}"
+created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"
 
 thoughtdeck_url: ${thoughtdeckUrl}
@@ -4341,6 +4404,8 @@ export type DeckState = {
   addedCards: AddedCard[];
   starred: string[];
   deckId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export const STORAGE_KEY = "thoughtdeck:data:v9";

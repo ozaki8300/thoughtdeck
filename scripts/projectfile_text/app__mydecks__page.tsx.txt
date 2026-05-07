@@ -14,6 +14,7 @@ type Deck = {
   user_id: string;
   title: string;
   created_at: string;
+  updated_at: string;
   star: number;
   trigger: string;
   keywords: string[];
@@ -166,6 +167,7 @@ function loadSavedDecks() {
       user_id: deck.user_id ?? "",
       title: deck.title ?? "Untitled Deck",
       created_at: deck.created_at ?? "",
+      updated_at: deck.updated_at ?? deck.created_at ?? "",
       star: deck.star ?? 0,
       trigger: deck.trigger ?? "",
       keywords: deck.keywords ?? [],
@@ -408,6 +410,9 @@ function parseDeck(text: string): Deck | null {
   const created_at =
     getYamlValue(yaml, "created_at") ||
     new Date().toISOString();
+  const updated_at =
+    getYamlValue(yaml, "updated_at") ||
+    created_at;
   const user_id =
     getYamlValue(yaml, "user_id");
   const keywords: string[] = [];
@@ -419,6 +424,7 @@ function parseDeck(text: string): Deck | null {
     user_id,
     title,
     created_at,
+    updated_at,
     star: 0,
     trigger: generateTrigger(raw, memo, output),
     keywords,
@@ -550,7 +556,21 @@ export default function MyDecksPage() {
         );
 
         if (index >= 0) {
-          next[index] = imported;
+          const currentDeck = next[index];
+
+          const currentTime = new Date(
+            currentDeck.updated_at ||
+              currentDeck.created_at,
+          ).getTime();
+
+          const importedTime = new Date(
+            imported.updated_at ||
+              imported.created_at,
+          ).getTime();
+
+          if (importedTime >= currentTime) {
+            next[index] = imported;
+          }
         } else {
           next.push(imported);
         }
@@ -703,6 +723,8 @@ export default function MyDecksPage() {
       addedCards: [],
       starred: [],
       deckId: deck.deck_id,
+      createdAt: deck.created_at,
+      updatedAt: deck.updated_at,
     });
 
     window.location.assign(`/thoughtdeck?d=${encoded}`);

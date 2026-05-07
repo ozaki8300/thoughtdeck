@@ -50,6 +50,8 @@ export type DeckState = {
   addedCards: AddedCard[];
   starred: string[];
   deckId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export const STORAGE_KEY = "thoughtdeck:data:v9";
