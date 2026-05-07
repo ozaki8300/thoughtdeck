@@ -69,6 +69,14 @@ const IGNORE_FOLDERS = new Set([
   "image",
 ]);
 
+type ScanStats = {
+  scanned: number;
+  thoughtDecks: number;
+  updated: number;
+  added: number;
+  skipped: number;
+};
+
 function isIgnoredFolder(name: string) {
   if (IGNORE_FOLDERS.has(name.toLowerCase())) {
     return true;
@@ -439,8 +447,7 @@ export default function MyDecksPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [decks, setDecks] = useState<Deck[]>([]);
-  const [qrHistory, setQrHistory] = useState<QrHistoryItem[]>([]);
-  const [showQrHistory, setShowQrHistory] = useState(false);
+  const [, setQrHistory] = useState<QrHistoryItem[]>([]);
   const [filterMode, setFilterMode] = useState<"all" | "star">("all");
   const [importMessage, setImportMessage] = useState("");
   const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
@@ -516,6 +523,7 @@ export default function MyDecksPage() {
   const mergeImportedDecks = (
     loaded: Deck[],
     successMessage?: string,
+    stats?: ScanStats,
   ) => {
     if (loaded.length === 0) {
       setImportMessage(
@@ -566,9 +574,11 @@ export default function MyDecksPage() {
 
           if (importedTime >= currentTime) {
             next[index] = imported;
+            if (stats) stats.updated += 1;
           }
         } else {
           next.push(imported);
+          if (stats) stats.added += 1;
         }
       }
 
@@ -619,6 +629,7 @@ export default function MyDecksPage() {
   const scanDirectory = async (
     handle: FileSystemDirectoryHandle,
     loaded: Deck[],
+    stats: ScanStats,
   ) => {
     for await (const entry of handle.values()) {
       if (entry.kind === "file") {
@@ -626,12 +637,15 @@ export default function MyDecksPage() {
           continue;
         }
 
+        stats.scanned++;
+
         const file = await entry.getFile();
         const text = await file.text();
         const parsed = parseDeck(text);
 
         if (parsed) {
           loaded.push(parsed);
+          stats.thoughtDecks++;
 
           console.log(
             "ThoughtDeck file",
@@ -643,6 +657,8 @@ export default function MyDecksPage() {
 
       if (entry.kind === "directory") {
         if (isIgnoredFolder(entry.name)) {
+          stats.skipped++;
+
           console.log(
             "Skip folder",
             entry.name,
@@ -654,6 +670,7 @@ export default function MyDecksPage() {
         await scanDirectory(
           entry as FileSystemDirectoryHandle,
           loaded,
+          stats,
         );
       }
     }
@@ -680,15 +697,34 @@ export default function MyDecksPage() {
 
     try {
       const loaded: Deck[] = [];
+      const stats: ScanStats = {
+        scanned: 0,
+        thoughtDecks: 0,
+        updated: 0,
+        added: 0,
+        skipped: 0,
+      };
 
       await scanDirectory(
         vaultHandle,
         loaded,
+        stats,
       );
 
       mergeImportedDecks(
         loaded,
-        `${loaded.length}件のThoughtDeckをscan`,
+        undefined,
+        stats,
+      );
+
+      setImportMessage(
+        [
+          `${stats.scanned} scanned`,
+          `${stats.thoughtDecks} ThoughtDeck`,
+          `${stats.updated} updated`,
+          `${stats.added} added`,
+          `${stats.skipped} skipped`,
+        ].join(" • "),
       );
     } catch (error) {
       console.error(error);
@@ -964,41 +1000,6 @@ export default function MyDecksPage() {
             )}
           </section>
 
-          <section className="rounded-xl border border-[var(--td-border)] bg-[var(--td-card-bg)] p-4">
-            <h2 className="hidden text-sm font-semibold text-[var(--td-text)] sm:block">QR履歴</h2>
-            <div className="sm:hidden">
-              <button
-                onClick={() => setShowQrHistory((value) => !value)}
-                className="flex w-full items-center justify-between text-left text-sm font-semibold text-[var(--td-text)]"
-                aria-expanded={showQrHistory}
-              >
-                <span>QR履歴</span>
-                <span aria-hidden="true">{showQrHistory ? "▲" : "▼"}</span>
-              </button>
-            </div>
-            <div className={`${showQrHistory ? "grid" : "hidden"} mt-3 gap-3 sm:grid`}>
-              {qrHistory.length === 0 ? (
-                <div className="rounded-lg border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-3 text-sm text-[var(--td-muted)]">
-                  QR履歴はまだありません。
-                </div>
-              ) : (
-                qrHistory.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => window.location.assign(item.thoughtdeck_url)}
-                    className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-3 text-left transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                  >
-                    <span className="block min-w-0 truncate text-sm font-semibold text-[var(--td-text)]">
-                      {item.title || "Untitled Deck"}
-                    </span>
-                    <span className="mt-1 block text-xs text-[var(--td-muted)]">
-                      {formatDate(item.created_at)}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </section>
         </div>
         {isDragging && (
           <div className="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/40 text-lg text-[var(--td-text)]">
