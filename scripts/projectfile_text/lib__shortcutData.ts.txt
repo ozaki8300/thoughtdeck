@@ -14,7 +14,7 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "I", description: "素材表示 / 非表示", action: "toggleInput" },
   { key: "M", description: "メモ表示 / 非表示", action: "toggleMemo" },
   { key: "P", description: "投稿作成／編集", action: "editOutput" },
-  { key: "E", description: "選択中エリアを編集（モーダル）", action: "editSelected" },
+  { key: "Ctrl + E / Cmd + E", description: "選択中エリアを編集（モーダル）", action: "editSelected" },
   { key: "D", description: "PDFを開く／表示／非表示（PCのみ）", action: "togglePdf" },
   { key: "Q", description: "QRを表示", action: "showQr" },
   { key: "O", description: "Obsidian保存", action: "saveObsidian" },

@@ -1546,6 +1546,8 @@ export default function Home(props: HomeProps) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+
       const key = e.key.toLowerCase();
       if (isReadOnly) {
         if (!["m", "d"].includes(key)) return;
@@ -1555,7 +1557,7 @@ export default function Home(props: HomeProps) {
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement;
 
-      if (isTyping && key !== "e") return;
+      if (isTyping && !(e.ctrlKey || e.metaKey)) return;
 
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault();
@@ -1577,7 +1579,7 @@ export default function Home(props: HomeProps) {
         openOutputComposer();
       }
 
-      if (key === "e") {
+      if ((e.ctrlKey || e.metaKey) && key === "e") {
         e.preventDefault();
 
         if (expandedEditor === null) {
@@ -1890,7 +1892,7 @@ export default function Home(props: HomeProps) {
                 onClick={openOutputComposer}
                 className="hidden lg:block rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[10.5pt] text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-accent-bg)] hover:text-[var(--td-accent)]"
               >
-                編集 <span className="shortcut">(E)</span>
+                編集 <span className="shortcut">(Ctrl+E)</span>
               </button>
             )}
           </div>
@@ -2647,7 +2649,7 @@ export default function Home(props: HomeProps) {
                       >
                         Template
                       </button>
-                      <button onClick={() => { setShowLeft(true); setSelectedCardId("td-input"); setLastActivePanel("td-input"); setExpandedEditor("input"); }} className={panelButtonClass}>編集 <span className="shortcut">(E)</span></button>
+                      <button onClick={() => { setShowLeft(true); setSelectedCardId("td-input"); setLastActivePanel("td-input"); setExpandedEditor("input"); }} className={panelButtonClass}>編集 <span className="shortcut">(Ctrl+E)</span></button>
                     </div>
                   </div>
 
@@ -3147,7 +3149,7 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "I", description: "素材表示 / 非表示", action: "toggleInput" },
   { key: "M", description: "メモ表示 / 非表示", action: "toggleMemo" },
   { key: "P", description: "投稿作成／編集", action: "editOutput" },
-  { key: "E", description: "選択中エリアを編集（モーダル）", action: "editSelected" },
+  { key: "Ctrl + E / Cmd + E", description: "選択中エリアを編集（モーダル）", action: "editSelected" },
   { key: "D", description: "PDFを開く／表示／非表示（PCのみ）", action: "togglePdf" },
   { key: "Q", description: "QRを表示", action: "showQr" },
   { key: "O", description: "Obsidian保存", action: "saveObsidian" },
