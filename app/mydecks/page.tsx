@@ -30,9 +30,123 @@ type QrHistoryItem = {
   thoughtdeck_url: string;
 };
 
+declare global {
+  interface Window {
+    showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+  }
+
+  interface FileSystemHandlePermissionDescriptor {
+    mode?: "read" | "readwrite";
+  }
+
+  interface FileSystemDirectoryHandle {
+    values: () => AsyncIterable<FileSystemDirectoryHandle | FileSystemFileHandle>;
+    queryPermission: (
+      descriptor?: FileSystemHandlePermissionDescriptor,
+    ) => Promise<PermissionState>;
+    requestPermission: (
+      descriptor?: FileSystemHandlePermissionDescriptor,
+    ) => Promise<PermissionState>;
+  }
+}
+
 const STORAGE_KEY = "thoughtdeck:mydecks:v1";
 const QR_HISTORY_STORAGE_KEY = "thoughtdeck:qr-history:v1";
 const DRAFT_STORAGE_KEY = "thoughtdeck:draft:v1";
+const DB_NAME = "thoughtdeck-vault";
+const STORE_NAME = "settings";
+const HANDLE_KEY = "vaultHandle";
+const IGNORE_FOLDERS = new Set([
+  ".obsidian",
+  ".trash",
+  "_trash",
+  "trash",
+  "attachments",
+  "attachment",
+  "assets",
+  "images",
+  "image",
+]);
+
+function isIgnoredFolder(name: string) {
+  if (IGNORE_FOLDERS.has(name.toLowerCase())) {
+    return true;
+  }
+
+  return name.startsWith(".");
+}
+
+function openVaultDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      reject(request.error);
+    };
+  });
+}
+
+async function saveVaultHandle(
+  handle: FileSystemDirectoryHandle,
+) {
+  const db = await openVaultDB();
+
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(
+      STORE_NAME,
+      "readwrite",
+    );
+
+    tx.objectStore(STORE_NAME).put(
+      handle,
+      HANDLE_KEY,
+    );
+
+    tx.oncomplete = () => resolve();
+
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadVaultHandle() {
+  const db = await openVaultDB();
+
+  return new Promise<FileSystemDirectoryHandle | null>(
+    (resolve, reject) => {
+      const tx = db.transaction(
+        STORE_NAME,
+        "readonly",
+      );
+
+      const request =
+        tx.objectStore(STORE_NAME).get(
+          HANDLE_KEY,
+        );
+
+      request.onsuccess = () => {
+        resolve(
+          request.result ?? null,
+        );
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    },
+  );
+}
 
 function loadSavedDecks() {
   if (typeof window === "undefined") return [];
@@ -318,14 +432,17 @@ function deckKey(deck: Deck) {
 export default function MyDecksPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [decks, setDecks] = useState<Deck[]>(loadSavedDecks);
-  const [qrHistory] = useState<QrHistoryItem[]>(loadQrHistory);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [qrHistory, setQrHistory] = useState<QrHistoryItem[]>([]);
   const [showQrHistory, setShowQrHistory] = useState(false);
   const [filterMode, setFilterMode] = useState<"all" | "star">("all");
   const [importMessage, setImportMessage] = useState("");
   const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
   const [hasDraft, setHasDraft] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasLoadedLocalData, setHasLoadedLocalData] = useState(false);
+  const [vaultHandle, setVaultHandle] =
+    useState<FileSystemDirectoryHandle | null>(null);
   const sortedDecks = [...decks].sort((a, b) => {
     if (b.star !== a.star) return b.star - a.star;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -335,8 +452,15 @@ export default function MyDecksPage() {
   );
 
   useEffect(() => {
+    setDecks(loadSavedDecks());
+    setQrHistory(loadQrHistory());
+    setHasLoadedLocalData(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedLocalData) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(decks));
-  }, [decks]);
+  }, [decks, hasLoadedLocalData]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -346,23 +470,68 @@ export default function MyDecksPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const handleFiles = async (files: File[]) => {
-    if (files.length === 0) return;
+  useEffect(() => {
+    loadVaultHandle()
+      .then((handle) => {
+        if (handle) {
+          setVaultHandle(handle);
 
-    const loaded = (
-      await Promise.all(files.map(async (file) => parseDeck(await file.text())))
-    ).filter((deck): deck is Deck => Boolean(deck));
+          setImportMessage(
+            `Vault復元: ${handle.name}`,
+          );
 
+          console.log(
+            "Vault restored",
+            handle,
+          );
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const pickVault = async () => {
+    try {
+      const handle =
+        await window.showDirectoryPicker();
+
+      setVaultHandle(handle);
+      await saveVaultHandle(handle);
+
+      setImportMessage(
+        `Vault選択: ${handle.name}`,
+      );
+
+      console.log("Vault handle", handle);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const mergeImportedDecks = (
+    loaded: Deck[],
+    successMessage?: string,
+  ) => {
     if (loaded.length === 0) {
-      setImportMessage("ThoughtDeck形式のファイルが見つかりませんでした");
-      if (fileRef.current) fileRef.current.value = "";
+      setImportMessage(
+        "ThoughtDeck形式のファイルが見つかりませんでした",
+      );
+
       return;
     }
 
     const loadedKeys = loaded.map(deckKey);
-    const currentKeys = new Set(decks.map(deckKey));
-    const updatedCount = loadedKeys.filter((key) => currentKeys.has(key)).length;
-    const addedCount = loaded.length - updatedCount;
+
+    const currentKeys = new Set(
+      decks.map(deckKey),
+    );
+
+    const updatedCount =
+      loadedKeys.filter((key) =>
+        currentKeys.has(key),
+      ).length;
+
+    const addedCount =
+      loaded.length - updatedCount;
 
     setDecks((current) => {
       const next = [...current];
@@ -386,11 +555,138 @@ export default function MyDecksPage() {
       return next;
     });
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+
     setHighlightedKeys(loadedKeys);
-    setImportMessage(`${addedCount}件追加 / ${updatedCount}件更新`);
-    window.setTimeout(() => setHighlightedKeys([]), 1200);
-    window.setTimeout(() => setImportMessage(""), 3000);
+
+    setImportMessage(
+      successMessage ??
+        `${addedCount}件追加 / ${updatedCount}件更新`,
+    );
+
+    window.setTimeout(
+      () => setHighlightedKeys([]),
+      1200,
+    );
+
+    window.setTimeout(
+      () => setImportMessage(""),
+      3000,
+    );
+  };
+
+  const ensureVaultPermission = async (
+    handle: FileSystemDirectoryHandle,
+  ) => {
+    const options = { mode: "read" as const };
+
+    const query =
+      await handle.queryPermission(options);
+
+    if (query === "granted") {
+      return true;
+    }
+
+    const request =
+      await handle.requestPermission(options);
+
+    return request === "granted";
+  };
+
+  const scanDirectory = async (
+    handle: FileSystemDirectoryHandle,
+    loaded: Deck[],
+  ) => {
+    for await (const entry of handle.values()) {
+      if (entry.kind === "file") {
+        if (!entry.name.endsWith(".md")) {
+          continue;
+        }
+
+        const file = await entry.getFile();
+        const text = await file.text();
+        const parsed = parseDeck(text);
+
+        if (parsed) {
+          loaded.push(parsed);
+
+          console.log(
+            "ThoughtDeck file",
+            entry.name,
+            parsed,
+          );
+        }
+      }
+
+      if (entry.kind === "directory") {
+        if (isIgnoredFolder(entry.name)) {
+          console.log(
+            "Skip folder",
+            entry.name,
+          );
+
+          continue;
+        }
+
+        await scanDirectory(
+          entry as FileSystemDirectoryHandle,
+          loaded,
+        );
+      }
+    }
+  };
+
+  const scanVault = async () => {
+    if (!vaultHandle) {
+      setImportMessage("先にVaultを選択してください");
+      return;
+    }
+
+    const granted =
+      await ensureVaultPermission(
+        vaultHandle,
+      );
+
+    if (!granted) {
+      setImportMessage(
+        "Vault permission が必要です",
+      );
+
+      return;
+    }
+
+    try {
+      const loaded: Deck[] = [];
+
+      await scanDirectory(
+        vaultHandle,
+        loaded,
+      );
+
+      mergeImportedDecks(
+        loaded,
+        `${loaded.length}件のThoughtDeckをscan`,
+      );
+    } catch (error) {
+      console.error(error);
+
+      setImportMessage(
+        "Vault scan に失敗しました",
+      );
+    }
+  };
+
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    const loaded = (
+      await Promise.all(files.map(async (file) => parseDeck(await file.text())))
+    ).filter((deck): deck is Deck => Boolean(deck));
+
+    mergeImportedDecks(loaded);
 
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -563,6 +859,20 @@ export default function MyDecksPage() {
                   className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)]"
                 >
                   取り込む
+                </button>
+
+                <button
+                  onClick={pickVault}
+                  className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-sm text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                >
+                  📁 Vaultを選択
+                </button>
+
+                <button
+                  onClick={scanVault}
+                  className="rounded-lg border border-[var(--td-border-strong)] px-4 py-2 text-sm text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                >
+                  🔄 スキャン
                 </button>
               </div>
             </div>
