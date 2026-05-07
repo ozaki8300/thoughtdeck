@@ -288,13 +288,21 @@ FILE: app/mydecks/page.tsx
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { encodeDeck } from "@/lib/useDeckState";
 
 type Deck = {
   deck_id: string;
+  version: string;
+  user_id: string;
   title: string;
   created_at: string;
   star: number;
   trigger: string;
+  keywords: string[];
+  links: string[];
+  raw: string;
+  memo: string;
+  output: string;
 };
 
 type SavedDeck = Partial<Deck> & {
@@ -322,10 +330,17 @@ function loadSavedDecks() {
 
     const normalized = decks.map((deck) => ({
       deck_id: deck.deck_id ?? deck.deckId ?? "",
+      version: deck.version ?? "",
+      user_id: deck.user_id ?? "",
       title: deck.title ?? "Untitled Deck",
       created_at: deck.created_at ?? "",
       star: deck.star ?? 0,
       trigger: deck.trigger ?? "",
+      keywords: deck.keywords ?? [],
+      links: deck.links ?? [],
+      raw: deck.raw ?? "",
+      memo: deck.memo ?? "",
+      output: deck.output ?? "",
     }));
 
     return Array.from(
@@ -348,7 +363,8 @@ function loadQrHistory() {
 }
 
 function readFrontmatter(text: string) {
-  const match = text.match(/^---\n([\s\S]*?)\n---/);
+  const normalized = text.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---/);
   return match?.[1] ?? "";
 }
 
@@ -529,8 +545,17 @@ function formatDate(value: string) {
 function parseDeck(text: string): Deck | null {
   const yaml = readFrontmatter(text);
 
-  const type = getYamlValue(yaml, "type") || getYamlValue(yaml, "format");
-  if (type !== "thoughtdeck") return null;
+  const format =
+    getYamlValue(yaml, "format") ||
+    getYamlValue(yaml, "type");
+  const version =
+    getYamlValue(yaml, "version");
+  const deckId =
+    getYamlValue(yaml, "deck_id");
+
+  if (format !== "thoughtdeck") return null;
+  if (version === "") return null;
+  if (deckId === "") return null;
 
   const raw =
     getYamlRowBlock(yaml, "raw") ||
@@ -551,16 +576,24 @@ function parseDeck(text: string): Deck | null {
   const created_at =
     getYamlValue(yaml, "created_at") ||
     new Date().toISOString();
-
-  const deck_id =
-    getYamlValue(yaml, "deck_id");
+  const user_id =
+    getYamlValue(yaml, "user_id");
+  const keywords: string[] = [];
+  const links: string[] = [];
 
   return {
-    deck_id,
+    deck_id: deckId,
+    version,
+    user_id,
     title,
     created_at,
     star: 0,
     trigger: generateTrigger(raw, memo, output),
+    keywords,
+    links,
+    raw,
+    memo,
+    output,
   };
 }
 
@@ -649,11 +682,16 @@ export default function MyDecksPage() {
   };
 
   const openDeck = (deck: Deck) => {
-    if (!deck.deck_id) return;
+    const encoded = encodeDeck({
+      raw: deck.raw,
+      memo: deck.memo,
+      output: deck.output,
+      addedCards: [],
+      starred: [],
+      deckId: deck.deck_id,
+    });
 
-    window.location.assign(
-      `/thoughtdeck?resume=${deck.deck_id}`,
-    );
+    window.location.assign(`/thoughtdeck?d=${encoded}`);
   };
 
   const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
