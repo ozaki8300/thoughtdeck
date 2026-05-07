@@ -1,4 +1,3 @@
-import { getTitle } from "./deckParser";
 import { buildRestoreUrl } from "./useDeckState";
 
 type BuildThoughtDeckMdArgs = {
@@ -63,7 +62,6 @@ export function buildThoughtDeckMd({
   output,
   deckId,
 }: BuildThoughtDeckMdArgs) {
-  const title = getTitle(raw) || "Untitled Deck";
   const userId = getUserId();
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
@@ -102,19 +100,16 @@ keywords: []
 links: []
 ---
 
-# ${title}
-
-## 🧠 Raw
 ${visible(raw)}
 
 ---
 
-## ✍️ Memo
+## Memo
 ${visible(memo)}
 
 ---
 
-## 📤 Output
+## Output
 ${visible(output)}
 
 ---
