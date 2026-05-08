@@ -50,6 +50,7 @@ export type DeckState = {
   addedCards: AddedCard[];
   starred: string[];
   deckId?: string | null;
+  noteId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   restoreMode?: "revision" | "fork" | "readonly";
@@ -461,7 +462,7 @@ export function buildRestoreUrl(
   output: string,
   addedCards: AddedCard[],
   starred: string[],
-  deckId?: string | null,
+  noteId?: string | null,
   publication?: Partial<PublicationSnapshot> | null,
   share?: Partial<ShareSnapshot> | null,
 ) {
@@ -471,8 +472,8 @@ export function buildRestoreUrl(
     createPublication(publication);
   const restoreShare =
     createShareEntity(share);
-  const noteId =
-    deckId ?? generatePortableId("note");
+  const semanticNoteId =
+    noteId ?? generatePortableId("note");
   const deck: DeckState = {
     raw,
     memo,
@@ -480,12 +481,14 @@ export function buildRestoreUrl(
     addedCards,
     starred,
     deckId: null,
+    noteId:
+      semanticNoteId,
     restoreMode: "readonly",
     sourceDeckId:
-      noteId,
+      semanticNoteId,
     lineage: {
       rootDeckId:
-        noteId,
+        semanticNoteId,
     },
     publicationId:
       restorePublication.publicationId,
@@ -508,6 +511,7 @@ export async function createShareSnapshot({
   addedCards,
   starred,
   deckId,
+  noteId,
   publication,
 }: {
   raw: string;
@@ -516,6 +520,7 @@ export async function createShareSnapshot({
   addedCards: AddedCard[];
   starred: string[];
   deckId?: string | null;
+  noteId?: string | null;
   publication?: Partial<PublicationSnapshot> | null;
 }) {
   // workspace runtime persistence identity
@@ -562,7 +567,8 @@ export async function createShareSnapshot({
     output,
     addedCards,
     starred,
-    workspaceId,
+    noteId ??
+      generatePortableId("note"),
     publicationSnapshot,
     shareSnapshot,
   );
@@ -1074,6 +1080,10 @@ export function useDeckState(props?: UseDeckStateProps) {
         const sourceDeckId =
           snapshot.sourceDeckId ??
           null;
+        const semanticNoteId =
+          snapshot.noteId ??
+          snapshot.sourceDeckId ??
+          generatePortableId("note");
         const forkedFromDeckId =
           snapshot.sourceDeckId ??
           null;
@@ -1115,6 +1125,7 @@ export function useDeckState(props?: UseDeckStateProps) {
           JSON.stringify({
             ...snapshot,
             deckId: migratedDeckId,
+            noteId: semanticNoteId,
             restoreMode,
             sourceDeckId,
             lineage,
@@ -1241,6 +1252,9 @@ export function useDeckState(props?: UseDeckStateProps) {
           addedCards,
           starred,
           deckId,
+          noteId:
+            savedSnapshot.noteId ??
+            null,
 
           restoreMode:
             "revision",
@@ -1395,6 +1409,9 @@ export function useDeckState(props?: UseDeckStateProps) {
         addedCards,
         starred,
         deckId,
+        noteId:
+          savedSnapshot.noteId ??
+          null,
         publication: {
           publicationId:
             publicationId ??
@@ -1436,16 +1453,18 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const downloadMd = () => {
-    const activeDeckId =
-      deckId ?? generatePortableId("note");
-
-    setDeckId(activeDeckId);
+    const savedSnapshot = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}",
+    ) as Partial<DeckState>;
+    const activeNoteId =
+      savedSnapshot.noteId ??
+      generatePortableId("note");
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
-      deckId: activeDeckId,
+      deckId: activeNoteId,
     });
     const timestamp = getTimestampSlug();
     const fileName = getObsidianTitle(title, timestamp);
@@ -1458,30 +1477,39 @@ export function useDeckState(props?: UseDeckStateProps) {
     URL.revokeObjectURL(url);
     // updateMyDecksLocal(
     //   title,
-    //   activeDeckId,
+    //   activeNoteId,
     //   generateTriggerPreview(raw, memo, output),
     // );
   };
 
   const copyMd = async () => {
+    const savedSnapshot = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}",
+    ) as Partial<DeckState>;
+    const activeNoteId =
+      savedSnapshot.noteId ??
+      generatePortableId("note");
+
     await navigator.clipboard.writeText(
-      buildThoughtDeckMd({ raw, memo, output, deckId }),
+      buildThoughtDeckMd({ raw, memo, output, deckId: activeNoteId }),
     );
     setCopyStatus("MDコピー済");
     window.setTimeout(() => setCopyStatus(""), 1800);
   };
 
   const saveToObsidian = async () => {
-    const activeDeckId =
-      deckId ?? generatePortableId("note");
-
-    setDeckId(activeDeckId);
+    const savedSnapshot = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}",
+    ) as Partial<DeckState>;
+    const activeNoteId =
+      savedSnapshot.noteId ??
+      generatePortableId("note");
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
-      deckId: activeDeckId,
+      deckId: activeNoteId,
     });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
@@ -1495,7 +1523,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     window.setTimeout(() => setObsidianToast(""), 2600);
     // updateMyDecksLocal(
     //   title,
-    //   activeDeckId,
+    //   activeNoteId,
     //   generateTriggerPreview(raw, memo, output),
     // );
     await new Promise((resolve) => setTimeout(resolve, 50));
