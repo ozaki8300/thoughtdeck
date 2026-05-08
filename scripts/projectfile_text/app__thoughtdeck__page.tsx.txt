@@ -332,6 +332,8 @@ export default function Home(props: HomeProps) {
     createShare,
     copyTemplateBundle,
   } = useDeckState(mergedProps);
+  const isPublishedSnapshot =
+    isReadOnly;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1303,6 +1305,12 @@ export default function Home(props: HomeProps) {
             {copyStatus && (
               <span className="text-[11pt] text-[var(--td-text)]">{copyStatus}</span>
             )}
+            {isPublishedSnapshot && (
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/70">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                Published Snapshot
+              </div>
+            )}
 
             <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
               <button
@@ -1356,15 +1364,13 @@ export default function Home(props: HomeProps) {
                 </button>
               )}
 
-              {!isReadOnly && (
-                <button
-                  onClick={createShare}
-                  className={topButtonClass}
-                  title="QRで共有"
-                >
-                  共有 <span className="shortcut">(Q)</span>
-                </button>
-              )}
+              <button
+                onClick={createShare}
+                className={topButtonClass}
+                title={isPublishedSnapshot ? "Re-share Publication" : "Publish Snapshot"}
+              >
+                {isPublishedSnapshot ? "Re-share Publication" : "Publish Snapshot"} <span className="shortcut">(Q)</span>
+              </button>
 
               {!isReadOnly && (
                 <div className="relative">
@@ -1531,6 +1537,18 @@ export default function Home(props: HomeProps) {
 
         </div>
       </header>
+
+      {isPublishedSnapshot && (
+        <div className="mx-4 mt-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70">
+          <div className="font-medium text-white/90">
+            This is a shared publication snapshot.
+          </div>
+
+          <div className="mt-1 text-white/60">
+            Editing or re-sharing creates your own workspace fork while preserving semantic continuity.
+          </div>
+        </div>
+      )}
 
       <QRModal
         isOpen={showQr}
@@ -1771,7 +1789,7 @@ export default function Home(props: HomeProps) {
             onClick={createShare}
             className={`${topButtonClass} flex-1 text-center`}
           >
-            共有
+            {isPublishedSnapshot ? "Re-share Publication" : "Publish Snapshot"}
           </button>
 
           <button
