@@ -8,7 +8,7 @@ import {
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "./deckTypes";
 import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
 import { getTitle } from "./deckParser";
-import { createDeck, createPublicationSnapshot, createWorkspaceRevision } from "./deckService";
+import { createDeck, createPublicationSnapshot, createWorkspaceRevision, deckExists } from "./deckService";
 import { useCloudSave } from "./useCloudSave";
 import {
   blankRaw,
@@ -249,6 +249,19 @@ export function generatePortableId(kind: ThoughtDeckIdKind) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
+export function generateWorkspaceId() {
+  if (
+    typeof crypto !== "undefined" &&
+    "randomUUID" in crypto
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `ws_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
 export type PublicationSnapshot = {
   publicationId: string;
   publishedAt: string;
@@ -458,19 +471,21 @@ export function buildRestoreUrl(
     createPublication(publication);
   const restoreShare =
     createShareEntity(share);
+  const noteId =
+    deckId ?? generatePortableId("note");
   const deck: DeckState = {
     raw,
     memo,
     output,
     addedCards,
     starred,
-    deckId,
+    deckId: null,
     restoreMode: "readonly",
     sourceDeckId:
-      deckId ?? null,
+      noteId,
     lineage: {
       rootDeckId:
-        deckId ?? null,
+        noteId,
     },
     publicationId:
       restorePublication.publicationId,
@@ -503,7 +518,8 @@ export async function createShareSnapshot({
   deckId?: string | null;
   publication?: Partial<PublicationSnapshot> | null;
 }) {
-  let id = deckId;
+  // workspace runtime persistence identity
+  let workspaceId = deckId;
   const title = getTitle(raw);
   const publicationSnapshot =
     createPublication(
@@ -512,8 +528,8 @@ export async function createShareSnapshot({
   const shareSnapshot =
     createShareEntity();
 
-  if (!id) {
-    id = await createDeck({
+  if (!workspaceId || !(await deckExists(workspaceId))) {
+    workspaceId = await createDeck({
       title,
       raw,
       memo,
@@ -522,7 +538,7 @@ export async function createShareSnapshot({
   }
 
   await createWorkspaceRevision({
-    deckId: id,
+    deckId: workspaceId,
     title,
     raw,
     memo,
@@ -530,7 +546,7 @@ export async function createShareSnapshot({
   });
 
   await createPublicationSnapshot({
-    deckId: id,
+    deckId: workspaceId,
     title,
     raw,
     memo,
@@ -546,15 +562,15 @@ export async function createShareSnapshot({
     output,
     addedCards,
     starred,
-    id,
+    workspaceId,
     publicationSnapshot,
     shareSnapshot,
   );
-  const shortUrl = `${window.location.origin}/deck/${id}`;
+  const shortUrl = `${window.location.origin}/deck/${workspaceId}`;
   const longUrl = restoreUrl;
 
   return {
-    deckId: id,
+    deckId: workspaceId,
     publicationId:
       publicationSnapshot.publicationId,
     publishedAt:
@@ -1057,7 +1073,6 @@ export function useDeckState(props?: UseDeckStateProps) {
           null;
         const sourceDeckId =
           snapshot.sourceDeckId ??
-          snapshot.deckId ??
           null;
         const forkedFromDeckId =
           snapshot.sourceDeckId ??
@@ -1066,17 +1081,15 @@ export function useDeckState(props?: UseDeckStateProps) {
           snapshot.sourceShareId ??
           snapshot.shareId ??
           null;
+        // workspace runtime identity
+        // semantic note continuity is handled separately
         const migratedDeckId =
-          restoreMode === "fork"
-            ? generatePortableId("note")
-            : snapshot.deckId ??
-              generatePortableId("note");
+          generateWorkspaceId();
         const lineage =
           restoreMode === "fork"
             ? {
                 rootDeckId:
-                  snapshot.sourceDeckId ??
-                  snapshot.deckId ??
+                  sourceDeckId ??
                   migratedDeckId,
 
                 forkedFromDeckId,
@@ -1085,7 +1098,7 @@ export function useDeckState(props?: UseDeckStateProps) {
               }
             : snapshot.lineage ?? {
                 rootDeckId:
-                  snapshot.deckId ??
+                  sourceDeckId ??
                   migratedDeckId,
               };
 
@@ -1361,8 +1374,6 @@ export function useDeckState(props?: UseDeckStateProps) {
   };
 
   const createShare = async () => {
-    if (isReadOnly) return;
-
     try {
       const savedSnapshot = JSON.parse(
         localStorage.getItem(STORAGE_KEY) || "{}",

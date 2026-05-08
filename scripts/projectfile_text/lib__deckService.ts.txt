@@ -39,6 +39,23 @@ export async function updateDeck(id: string, deck: DeckPayload) {
   if (error) throw error;
 }
 
+export async function deckExists(
+  deckId: string,
+) {
+  const { data, error } = await supabase
+    .from("decks")
+    .select("id")
+    .eq("id", deckId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(error);
+    return false;
+  }
+
+  return !!data;
+}
+
 export async function createWorkspaceRevision({
   deckId,
   title,

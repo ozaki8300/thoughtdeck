@@ -138,6 +138,7 @@ export function buildThoughtDeckMd({
   share,
 }: BuildThoughtDeckMdArgs) {
   const userId = getUserId();
+  // deck_id is semantic note continuity here, not Supabase persistence identity.
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
   const createdAt = getCreatedAt(deckIdFinal, now);

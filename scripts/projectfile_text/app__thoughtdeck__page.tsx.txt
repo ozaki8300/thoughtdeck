@@ -20,13 +20,11 @@ import {
   getDynamicColumnClass,
   nextThemeMode,
   themeLabel,
-  buildRestoreUrl,
   decodeDeck,
   useDeckState,
 } from "../../lib/useDeckState";
 
 import type { Card, OneColumnSection, UseDeckStateProps } from "../../lib/useDeckState";
-import { createDeck, updateDeck } from "../../lib/deckService";
 
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -331,50 +329,9 @@ export default function Home(props: HomeProps) {
     insertTemplate,
     insertDefaultTemplate,
     toggleStar,
+    createShare,
     copyTemplateBundle,
   } = useDeckState(mergedProps);
-
-  const createShare = async () => {
-    try {
-      let id = deckId;
-
-      if (!id) {
-        id = await createDeck({
-          title,
-          raw,
-          memo,
-          output,
-        });
-        setDeckId(id);
-      } else {
-        await updateDeck(id, {
-          title,
-          raw,
-          memo,
-          output,
-        });
-      }
-
-      const longUrl = buildRestoreUrl(
-        raw,
-        memo,
-        output,
-        addedCards,
-        starred,
-      );
-      const shareUrl = `${window.location.origin}/deck/${id}?ro=1`;
-      const copyUrl = `${longUrl}&ro=1`;
-
-      setShareUrl(shareUrl);
-      setLongUrl(copyUrl);
-      setQrError("");
-      setShowQr(true);
-
-      await navigator.clipboard.writeText(copyUrl);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
