@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { encodeDeck } from "@/lib/useDeckState";
+import type {
+  DeckLineage,
+  DeckPublication,
+  DeckShare,
+} from "@/lib/buildThoughtDeckMd";
 
 type Deck = {
   deck_id: string;
@@ -11,6 +16,9 @@ type Deck = {
   title: string;
   created_at: string;
   updated_at: string;
+  lineage?: DeckLineage;
+  publication?: DeckPublication;
+  share?: DeckShare;
   star: number;
   trigger: string;
   keywords: string[];
@@ -172,6 +180,9 @@ function loadSavedDecks() {
       title: deck.title ?? "Untitled Deck",
       created_at: deck.created_at ?? "",
       updated_at: deck.updated_at ?? deck.created_at ?? "",
+      lineage: deck.lineage,
+      publication: deck.publication,
+      share: deck.share,
       star: deck.star ?? 0,
       trigger: deck.trigger ?? "",
       keywords: deck.keywords ?? [],
@@ -219,6 +230,45 @@ function unquoteYaml(value: string) {
 function getYamlValue(yaml: string, key: string) {
   const match = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
   return match ? unquoteYaml(match[1]) : "";
+}
+
+function getYamlNestedValue(
+  yaml: string,
+  parent: string,
+  key: string,
+) {
+  const lines = yaml.split("\n");
+
+  let inParent = false;
+
+  for (const line of lines) {
+    // parent:
+    if (line.trim() === `${parent}:`) {
+      inParent = true;
+      continue;
+    }
+
+    // parent block終了
+    if (
+      inParent &&
+      !line.startsWith("  ") &&
+      /^[a-zA-Z0-9_-]+:/.test(line)
+    ) {
+      break;
+    }
+
+    if (!inParent) continue;
+
+    const match = line.match(
+      new RegExp(`^\\s{2}${key}:\\s*(.*)$`),
+    );
+
+    if (match) {
+      return unquoteYaml(match[1]);
+    }
+  }
+
+  return "";
 }
 
 function getYamlBlock(yaml: string, key: "raw" | "memo" | "output") {
@@ -419,6 +469,65 @@ function parseDeck(text: string): Deck | null {
     created_at;
   const user_id =
     getYamlValue(yaml, "user_id");
+  const lineage: DeckLineage = {
+    rootDeckId:
+      getYamlNestedValue(
+        yaml,
+        "lineage",
+        "root_deck_id",
+      ) || null,
+
+    forkedFromDeckId:
+      getYamlNestedValue(
+        yaml,
+        "lineage",
+        "forked_from_deck_id",
+      ) || null,
+
+    forkedFromVersion:
+      getYamlNestedValue(
+        yaml,
+        "lineage",
+        "forked_from_version",
+      ) || null,
+
+    forkedFromShareId:
+      getYamlNestedValue(
+        yaml,
+        "lineage",
+        "forked_from_share_id",
+      ) || null,
+  };
+  const publication: DeckPublication = {
+    publicationId:
+      getYamlNestedValue(
+        yaml,
+        "publication",
+        "publication_id",
+      ) || null,
+
+    publishedAt:
+      getYamlNestedValue(
+        yaml,
+        "publication",
+        "published_at",
+      ) || null,
+  };
+  const share: DeckShare = {
+    shareId:
+      getYamlNestedValue(
+        yaml,
+        "share",
+        "share_id",
+      ) || null,
+
+    sharedAt:
+      getYamlNestedValue(
+        yaml,
+        "share",
+        "shared_at",
+      ) || null,
+  };
   const keywords: string[] = [];
   const links: string[] = [];
 
@@ -429,6 +538,9 @@ function parseDeck(text: string): Deck | null {
     title,
     created_at,
     updated_at,
+    lineage,
+    publication,
+    share,
     star: 0,
     trigger: generateTrigger(raw, memo, output),
     keywords,
@@ -553,10 +665,9 @@ export default function MyDecksPage() {
       for (const imported of loaded) {
         const index = next.findIndex(
           (deck) =>
-            (deck.deck_id &&
-              imported.deck_id &&
-              deck.deck_id === imported.deck_id) ||
-            deck.title === imported.title,
+            deck.deck_id &&
+            imported.deck_id &&
+            deck.deck_id === imported.deck_id,
         );
 
         if (index >= 0) {
@@ -757,6 +868,14 @@ export default function MyDecksPage() {
       deckId: deck.deck_id,
       createdAt: deck.created_at,
       updatedAt: deck.updated_at,
+      publicationId:
+        deck.publication?.publicationId ?? null,
+      publishedAt:
+        deck.publication?.publishedAt ?? null,
+      shareId:
+        deck.share?.shareId ?? null,
+      sharedAt:
+        deck.share?.sharedAt ?? null,
     });
 
     window.location.assign(`/thoughtdeck?d=${encoded}`);

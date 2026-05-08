@@ -8,7 +8,7 @@ import {
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "./deckTypes";
 import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
 import { getTitle } from "./deckParser";
-import { createDeck, updateDeck } from "./deckService";
+import { createDeck, createPublicationSnapshot, createWorkspaceRevision } from "./deckService";
 import { useCloudSave } from "./useCloudSave";
 import {
   blankRaw,
@@ -52,6 +52,19 @@ export type DeckState = {
   deckId?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  restoreMode?: "revision" | "fork" | "readonly";
+  sourceShareId?: string | null;
+  sourceDeckId?: string | null;
+  lineage?: {
+    rootDeckId?: string | null;
+    forkedFromDeckId?: string | null;
+    forkedFromVersion?: string | number | null;
+    forkedFromShareId?: string | null;
+  };
+  publicationId?: string | null;
+  publishedAt?: string | null;
+  shareId?: string | null;
+  sharedAt?: string | null;
 };
 
 export const STORAGE_KEY = "thoughtdeck:data:v9";
@@ -236,6 +249,68 @@ export function generatePortableId(kind: ThoughtDeckIdKind) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
+export type PublicationSnapshot = {
+  publicationId: string;
+  publishedAt: string;
+};
+
+export type ShareSnapshot = {
+  shareId: string;
+  sharedAt: string;
+};
+
+export function createPublication(
+  existing?: Partial<PublicationSnapshot> | null,
+): PublicationSnapshot {
+  if (
+    existing?.publicationId &&
+    existing?.publishedAt
+  ) {
+    return {
+      publicationId:
+        existing.publicationId,
+
+      publishedAt:
+        existing.publishedAt,
+    };
+  }
+
+  // publication is immutable snapshot identity
+  // reuse existing publication whenever possible
+  return {
+    publicationId:
+      generatePortableId("group"),
+
+    publishedAt:
+      new Date().toISOString(),
+  };
+}
+
+export function createShareEntity(
+  existing?: Partial<ShareSnapshot> | null,
+): ShareSnapshot {
+  if (
+    existing?.shareId &&
+    existing?.sharedAt
+  ) {
+    return {
+      shareId:
+        existing.shareId,
+
+      sharedAt:
+        existing.sharedAt,
+    };
+  }
+
+  return {
+    shareId:
+      generatePortableId("group"),
+
+    sharedAt:
+      new Date().toISOString(),
+  };
+}
+
 export type ObsidianExportIds = {
   noteId: string;
   groupId: string;
@@ -374,9 +449,15 @@ export function buildRestoreUrl(
   addedCards: AddedCard[],
   starred: string[],
   deckId?: string | null,
+  publication?: Partial<PublicationSnapshot> | null,
+  share?: Partial<ShareSnapshot> | null,
 ) {
   if (typeof window === "undefined") return "";
   const base = `${window.location.origin}${window.location.pathname}`;
+  const restorePublication =
+    createPublication(publication);
+  const restoreShare =
+    createShareEntity(share);
   const deck: DeckState = {
     raw,
     memo,
@@ -384,8 +465,104 @@ export function buildRestoreUrl(
     addedCards,
     starred,
     deckId,
+    restoreMode: "readonly",
+    sourceDeckId:
+      deckId ?? null,
+    lineage: {
+      rootDeckId:
+        deckId ?? null,
+    },
+    publicationId:
+      restorePublication.publicationId,
+
+    publishedAt:
+      restorePublication.publishedAt,
+    shareId:
+      restoreShare.shareId,
+    sharedAt:
+      restoreShare.sharedAt,
+    sourceShareId: null,
   };
   return `${base}?d=${encodeDeck(deck)}`;
+}
+
+export async function createShareSnapshot({
+  raw,
+  memo,
+  output,
+  addedCards,
+  starred,
+  deckId,
+  publication,
+}: {
+  raw: string;
+  memo: string;
+  output: string;
+  addedCards: AddedCard[];
+  starred: string[];
+  deckId?: string | null;
+  publication?: Partial<PublicationSnapshot> | null;
+}) {
+  let id = deckId;
+  const title = getTitle(raw);
+  const publicationSnapshot =
+    createPublication(
+      publication,
+    );
+  const shareSnapshot =
+    createShareEntity();
+
+  if (!id) {
+    id = await createDeck({
+      title,
+      raw,
+      memo,
+      output,
+    });
+  }
+
+  await createWorkspaceRevision({
+    deckId: id,
+    title,
+    raw,
+    memo,
+    output,
+  });
+
+  await createPublicationSnapshot({
+    deckId: id,
+    title,
+    raw,
+    memo,
+    output,
+    publicationId:
+      publicationSnapshot.publicationId,
+    publishedAt:
+      publicationSnapshot.publishedAt,
+  });
+  const restoreUrl = buildRestoreUrl(
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+    id,
+    publicationSnapshot,
+    shareSnapshot,
+  );
+  const shortUrl = `${window.location.origin}/deck/${id}`;
+  const longUrl = restoreUrl;
+
+  return {
+    deckId: id,
+    publicationId:
+      publicationSnapshot.publicationId,
+    publishedAt:
+      publicationSnapshot.publishedAt,
+    shortUrl,
+    longUrl,
+    restoreUrl,
+  };
 }
 
 export function formatObsidianTimestamp(date = new Date()) {
@@ -869,9 +1046,48 @@ export function useDeckState(props?: UseDeckStateProps) {
         if (!json) return;
 
         const snapshot = JSON.parse(json) as Partial<DeckState>;
-        const migratedDeckId =
+        const restoreMode =
+          snapshot.restoreMode ??
+          "revision";
+        const publicationId =
+          snapshot.publicationId ??
+          null;
+        const publishedAt =
+          snapshot.publishedAt ??
+          null;
+        const sourceDeckId =
+          snapshot.sourceDeckId ??
           snapshot.deckId ??
-          generatePortableId("note");
+          null;
+        const forkedFromDeckId =
+          snapshot.sourceDeckId ??
+          null;
+        const forkedFromShareId =
+          snapshot.sourceShareId ??
+          snapshot.shareId ??
+          null;
+        const migratedDeckId =
+          restoreMode === "fork"
+            ? generatePortableId("note")
+            : snapshot.deckId ??
+              generatePortableId("note");
+        const lineage =
+          restoreMode === "fork"
+            ? {
+                rootDeckId:
+                  snapshot.sourceDeckId ??
+                  snapshot.deckId ??
+                  migratedDeckId,
+
+                forkedFromDeckId,
+
+                forkedFromShareId,
+              }
+            : snapshot.lineage ?? {
+                rootDeckId:
+                  snapshot.deckId ??
+                  migratedDeckId,
+              };
 
         setRaw(snapshot.raw ?? "");
         setMemo(snapshot.memo ?? "");
@@ -883,7 +1099,15 @@ export function useDeckState(props?: UseDeckStateProps) {
         setShowRight(false);
         localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ ...snapshot, deckId: migratedDeckId }),
+          JSON.stringify({
+            ...snapshot,
+            deckId: migratedDeckId,
+            restoreMode,
+            sourceDeckId,
+            lineage,
+            publicationId,
+            publishedAt,
+          }),
         );
         return;
       } catch (e) {
@@ -991,9 +1215,43 @@ export function useDeckState(props?: UseDeckStateProps) {
   useEffect(() => {
     setSaveStatus("保存中");
     const timer = window.setTimeout(() => {
+      const savedSnapshot = JSON.parse(
+        localStorage.getItem(STORAGE_KEY) || "{}",
+      ) as Partial<DeckState>;
+
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ raw, memo, output, addedCards, starred, deckId }),
+        JSON.stringify({
+          raw,
+          memo,
+          output,
+          addedCards,
+          starred,
+          deckId,
+
+          restoreMode:
+            "revision",
+
+          publicationId:
+            savedSnapshot.publicationId ??
+            null,
+
+          publishedAt:
+            savedSnapshot.publishedAt ??
+            null,
+
+          shareId:
+            savedSnapshot.shareId ??
+            null,
+
+          sharedAt:
+            savedSnapshot.sharedAt ??
+            null,
+
+          lineage:
+            savedSnapshot.lineage ??
+            null,
+        }),
       );
       setSaveStatus("保存済");
     }, 300);
@@ -1106,43 +1364,60 @@ export function useDeckState(props?: UseDeckStateProps) {
     if (isReadOnly) return;
 
     try {
-      let id = deckId;
-
-      if (!id) {
-        id = await createDeck({
-          title,
-          raw,
-          memo,
-          output,
-        });
-        setDeckId(id);
-      } else {
-        await updateDeck(id, {
-          title,
-          raw,
-          memo,
-          output,
-        });
-      }
-
-      const deckPath = `/deck/${id}`;
-      const url = `${window.location.origin}${deckPath}`;
-
-      const longUrl = buildRestoreUrl(
+      const savedSnapshot = JSON.parse(
+        localStorage.getItem(STORAGE_KEY) || "{}",
+      ) as Partial<DeckState>;
+      const publicationId =
+        savedSnapshot.restoreMode === "fork"
+          ? null
+          : savedSnapshot.publicationId ??
+            null;
+      const publishedAt =
+        savedSnapshot.restoreMode === "fork"
+          ? null
+          : savedSnapshot.publishedAt ??
+            null;
+      const result = await createShareSnapshot({
         raw,
         memo,
         output,
         addedCards,
         starred,
-        id,
-      );
+        deckId,
+        publication: {
+          publicationId:
+            publicationId ??
+            undefined,
+          publishedAt:
+            publishedAt ??
+            undefined,
+        },
+      });
 
-      setShareUrl(url);
-      setLongUrl(longUrl);
+      setDeckId(result.deckId);
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          ...savedSnapshot,
+          raw,
+          memo,
+          output,
+          addedCards,
+          starred,
+          deckId: result.deckId,
+          restoreMode: "revision",
+          publicationId:
+            result.publicationId,
+          publishedAt:
+            result.publishedAt,
+        }),
+      );
+      setShareUrl(result.shortUrl);
+      setLongUrl(result.longUrl);
       setQrError("");
       setShowQr(true);
 
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(result.shortUrl);
 
     } catch (e) {
       console.error(e);

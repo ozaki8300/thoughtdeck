@@ -38,3 +38,57 @@ export async function updateDeck(id: string, deck: DeckPayload) {
 
   if (error) throw error;
 }
+
+export async function createWorkspaceRevision({
+  deckId,
+  title,
+  raw,
+  memo,
+  output,
+}: {
+  deckId: string;
+  title: string;
+  raw: string;
+  memo: string;
+  output: string;
+}) {
+  await updateDeck(deckId, {
+    title,
+    raw,
+    memo,
+    output,
+  });
+}
+
+export async function createPublicationSnapshot({
+  deckId,
+  title,
+  raw,
+  memo,
+  output,
+  publicationId,
+  publishedAt,
+}: {
+  deckId: string;
+  title: string;
+  raw: string;
+  memo: string;
+  output: string;
+  publicationId: string;
+  publishedAt: string;
+}) {
+  void publicationId;
+  void publishedAt;
+
+  // publication snapshots must become append-only immutable entities
+  // current implementation still writes into mutable workspace deck
+  // future phase:
+  // publication table separation
+  // immutable publication persistence
+  await updateDeck(deckId, {
+    title,
+    raw,
+    memo,
+    output,
+  });
+}

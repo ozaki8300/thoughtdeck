@@ -4,11 +4,31 @@ FILE: lib/buildThoughtDeckMd.ts
 
 import { buildRestoreUrl } from "./useDeckState";
 
+export type DeckLineage = {
+  rootDeckId?: string | null;
+  forkedFromDeckId?: string | null;
+  forkedFromVersion?: string | number | null;
+  forkedFromShareId?: string | null;
+};
+
+export type DeckPublication = {
+  publicationId?: string | null;
+  publishedAt?: string | null;
+};
+
+export type DeckShare = {
+  shareId?: string | null;
+  sharedAt?: string | null;
+};
+
 type BuildThoughtDeckMdArgs = {
   raw: string;
   memo: string;
   output: string;
   deckId: string | null;
+  lineage?: DeckLineage;
+  publication?: DeckPublication;
+  share?: DeckShare;
 };
 
 const CREATED_AT_STORAGE_KEY = "thoughtdeck:created-at:v1";
@@ -95,6 +115,14 @@ function yamlSafe(value: string) {
     .replace(/"/g, '\\"');
 }
 
+function lineageValue(value?: string | number | null) {
+  if (value === undefined || value === null || value === "") {
+    return '""';
+  }
+
+  return `"${yamlSafe(String(value))}"`;
+}
+
 // 変更箇所: Markdown本文で空データを見える形にする
 function visible(value: string | null | undefined) {
   return value && value.trim() ? value : "_(empty)_";
@@ -105,11 +133,50 @@ export function buildThoughtDeckMd({
   memo,
   output,
   deckId,
+  lineage,
+  publication,
+  share,
 }: BuildThoughtDeckMdArgs) {
   const userId = getUserId();
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
   const createdAt = getCreatedAt(deckIdFinal, now);
+  const lineageData = {
+    rootDeckId:
+      lineage?.rootDeckId ??
+      deckIdFinal,
+
+    forkedFromDeckId:
+      lineage?.forkedFromDeckId ??
+      null,
+
+    forkedFromVersion:
+      lineage?.forkedFromVersion ??
+      null,
+
+    forkedFromShareId:
+      lineage?.forkedFromShareId ??
+      share?.shareId ??
+      null,
+  };
+  const publicationData = {
+    publicationId:
+      publication?.publicationId ??
+      null,
+
+    publishedAt:
+      publication?.publishedAt ??
+      null,
+  };
+  const shareData = {
+    shareId:
+      share?.shareId ??
+      null,
+
+    sharedAt:
+      share?.sharedAt ??
+      null,
+  };
   const thoughtdeckUrl = buildRestoreUrl(
     raw,
     memo,
@@ -117,6 +184,24 @@ export function buildThoughtDeckMd({
     [],
     [],
     deckIdFinal,
+    {
+      publicationId:
+        publicationData.publicationId ??
+        undefined,
+
+      publishedAt:
+        publicationData.publishedAt ??
+        undefined,
+    },
+    {
+      shareId:
+        shareData.shareId ??
+        undefined,
+
+      sharedAt:
+        shareData.sharedAt ??
+        undefined,
+    },
   );
 
   return `---
@@ -128,6 +213,20 @@ deck_id: ${deckIdFinal}
 
 created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"
+
+lineage:
+  root_deck_id: ${lineageValue(lineageData.rootDeckId)}
+  forked_from_deck_id: ${lineageValue(lineageData.forkedFromDeckId)}
+  forked_from_version: ${lineageValue(lineageData.forkedFromVersion)}
+  forked_from_share_id: ${lineageValue(lineageData.forkedFromShareId)}
+
+publication:
+  publication_id: ${lineageValue(publicationData.publicationId)}
+  published_at: ${lineageValue(publicationData.publishedAt)}
+
+share:
+  share_id: ${lineageValue(shareData.shareId)}
+  shared_at: ${lineageValue(shareData.sharedAt)}
 
 thoughtdeck_url: ${thoughtdeckUrl}
 
