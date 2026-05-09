@@ -23,6 +23,7 @@ lib/
 ├── deckParser.ts
 ├── deckService.ts
 ├── deckTypes.ts
+├── groupDecksByPath.ts
 ├── shortcutData.ts
 ├── supabase.ts
 ├── useCloudSave.ts

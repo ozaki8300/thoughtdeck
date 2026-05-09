@@ -22,6 +22,7 @@ type BuildThoughtDeckMdArgs = {
   memo: string;
   output: string;
   deckId: string | null;
+  contextId?: string | null;
   lineage?: DeckLineage;
   publication?: DeckPublication;
   share?: DeckShare;
@@ -129,6 +130,7 @@ export function buildThoughtDeckMd({
   memo,
   output,
   deckId,
+  contextId,
   lineage,
   publication,
   share,
@@ -207,6 +209,7 @@ version: 1
 
 user_id: ${userId}
 deck_id: ${deckIdFinal}
+${contextId ? `context_id: ${yamlSafe(contextId)}\n` : ""}
 
 created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"

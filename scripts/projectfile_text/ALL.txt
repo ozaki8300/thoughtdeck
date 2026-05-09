@@ -288,6 +288,9 @@ FILE: app/mydecks/page.tsx
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  groupDecksByPath,
+} from "@/lib/groupDecksByPath";
 import { encodeDeck } from "@/lib/useDeckState";
 import type {
   DeckLineage,
@@ -312,6 +315,8 @@ type Deck = {
   raw: string;
   memo: string;
   output: string;
+  relativePath?: string;
+  contextId?: string;
 };
 
 type SavedDeck = Partial<Deck> & {
@@ -377,6 +382,23 @@ function isIgnoredFolder(name: string) {
   }
 
   return name.startsWith(".");
+}
+
+function buildContextId(relativePath?: string) {
+  if (!relativePath) {
+    return "";
+  }
+
+  const lastSeparatorIndex = relativePath.lastIndexOf("/");
+
+  if (lastSeparatorIndex <= 0) {
+    return "";
+  }
+
+  return relativePath
+    .slice(0, lastSeparatorIndex)
+    .replaceAll("/", "-")
+    .toLowerCase();
 }
 
 function openVaultDB(): Promise<IDBDatabase> {
@@ -476,6 +498,8 @@ function loadSavedDecks() {
       raw: deck.raw ?? "",
       memo: deck.memo ?? "",
       output: deck.output ?? "",
+      relativePath: deck.relativePath ?? "",
+      contextId: deck.contextId ?? "",
     }));
 
     return Array.from(
@@ -716,6 +740,31 @@ function formatDate(value: string) {
   });
 }
 
+function formatRelativeTime(value: string) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  const dayMs = 1000 * 60 * 60 * 24;
+  const days = Math.max(0, Math.floor(diffMs / dayMs));
+
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+
+  const weeks = Math.floor(days / 7);
+  if (weeks < 8) return `${weeks} weeks ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} months ago`;
+
+  const years = Math.floor(days / 365);
+  return `${years} years ago`;
+}
+
 function parseDeck(text: string): Deck | null {
   const yaml = readFrontmatter(text);
 
@@ -755,6 +804,8 @@ function parseDeck(text: string): Deck | null {
     created_at;
   const user_id =
     getYamlValue(yaml, "user_id");
+  const contextId =
+    getYamlValue(yaml, "context_id");
   const lineage: DeckLineage = {
     rootDeckId:
       getYamlNestedValue(
@@ -834,6 +885,7 @@ function parseDeck(text: string): Deck | null {
     raw,
     memo,
     output,
+    contextId,
   };
 }
 
@@ -861,6 +913,8 @@ export default function MyDecksPage() {
   const visibleDecks = sortedDecks.filter((deck) =>
     filterMode === "star" ? deck.star >= 3 : true,
   );
+  const groupedDecks =
+    groupDecksByPath(visibleDecks);
 
   useEffect(() => {
     setDecks(loadSavedDecks());
@@ -1027,6 +1081,7 @@ export default function MyDecksPage() {
     handle: FileSystemDirectoryHandle,
     loaded: Deck[],
     stats: ScanStats,
+    currentPath = "",
   ) => {
     for await (const entry of handle.values()) {
       if (entry.kind === "file") {
@@ -1041,7 +1096,18 @@ export default function MyDecksPage() {
         const parsed = parseDeck(text);
 
         if (parsed) {
-          loaded.push(parsed);
+          const relativePath =
+            currentPath
+              ? `${currentPath}/${entry.name}`
+              : entry.name;
+
+          loaded.push({
+            ...parsed,
+            relativePath,
+            contextId:
+              parsed.contextId ||
+              buildContextId(relativePath),
+          });
           stats.thoughtDecks++;
 
           console.log(
@@ -1064,10 +1130,16 @@ export default function MyDecksPage() {
           continue;
         }
 
+        const nextPath =
+          currentPath
+            ? `${currentPath}/${entry.name}`
+            : entry.name;
+
         await scanDirectory(
           entry as FileSystemDirectoryHandle,
           loaded,
           stats,
+          nextPath,
         );
       }
     }
@@ -1136,7 +1208,25 @@ export default function MyDecksPage() {
     if (files.length === 0) return;
 
     const loaded = (
-      await Promise.all(files.map(async (file) => parseDeck(await file.text())))
+      await Promise.all(
+        files.map(async (file): Promise<Deck | null> => {
+          const parsed = parseDeck(await file.text());
+
+          if (!parsed) return null;
+
+          const relativePath =
+            file.webkitRelativePath || file.name;
+
+          return {
+            ...parsed,
+            relativePath:
+              relativePath,
+            contextId:
+              parsed.contextId ||
+              buildContextId(relativePath),
+          };
+        }),
+      )
     ).filter((deck): deck is Deck => Boolean(deck));
 
     mergeImportedDecks(loaded);
@@ -1164,7 +1254,51 @@ export default function MyDecksPage() {
         deck.share?.sharedAt ?? null,
     });
 
-    window.location.assign(`/thoughtdeck?d=${encoded}`);
+    const params = new URLSearchParams({
+      d: encoded,
+    });
+    params.set("currentTitle", deck.title);
+
+    const relativePath = deck.relativePath ?? "";
+    const lastSeparatorIndex = relativePath.lastIndexOf("/");
+
+    if (lastSeparatorIndex > 0) {
+      params.set(
+        "context",
+        relativePath.slice(0, lastSeparatorIndex),
+      );
+    }
+
+    const contextId =
+      deck.contextId || buildContextId(deck.relativePath);
+    const siblingTitles = contextId
+      ? Array.from(
+          new Set(
+            decks
+              .filter((item) =>
+                (item.contextId || buildContextId(item.relativePath)) ===
+                contextId,
+              )
+              .sort((a, b) => {
+                const aTime = new Date(
+                  a.updated_at || a.created_at,
+                ).getTime();
+                const bTime = new Date(
+                  b.updated_at || b.created_at,
+                ).getTime();
+
+                return aTime - bTime;
+              })
+              .map((item) => item.title),
+          ),
+        )
+      : [];
+
+    if (siblingTitles.length > 0) {
+      params.set("siblings", siblingTitles.join("|"));
+    }
+
+    window.location.assign(`/thoughtdeck?${params.toString()}`);
   };
 
   const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
@@ -1354,54 +1488,84 @@ export default function MyDecksPage() {
                 </p>
               </div>
             ) : (
-              visibleDecks.map((deck) => {
-                const key = deckKey(deck);
-
-                return (
-                  <article
-                    key={key}
-                    onClick={() => openDeck(deck)}
-                    className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-4 transition transform hover:scale-[1.01] hover:border-[var(--td-card-border-hover)] hover:bg-[var(--td-hover)] hover:shadow-lg ${
-                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
-                        <h2 className="min-w-0 flex-1 truncate text-sm text-[var(--td-muted)]">
-                          {deck.title}
+              groupedDecks.map((group) => (
+                <div
+                  key={group.groupKey}
+                  className="grid gap-5 border-l border-[var(--td-accent-border)]/25 py-1 pl-3 transition-colors duration-500 hover:border-[var(--td-accent-border)]/32 hover:bg-[var(--td-hover)]/10 hover:shadow-[0_0_24px_rgba(96,165,250,0.025)] sm:gap-4"
+                >
+                  {group.groupKey !== "Ungrouped" && (
+                    <div className="mb-2 sm:mb-1">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <h2 className="text-sm font-medium tracking-[0.01em] text-[var(--td-text-soft)] opacity-85">
+                          {group.groupKey.replaceAll("/", " / ")}
                         </h2>
-                        <div className="flex shrink-0 gap-0.5">
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <button
-                              key={value}
-                              onClick={(event) => updateStar(event, key, value)}
-                              className={`text-sm transition hover:text-yellow-300 ${
-                                value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
-                              }`}
-                              title={`${value} stars`}
-                            >
-                              ★
-                            </button>
-                          ))}
-                        </div>
+                        <span className="shrink-0 text-xs tracking-wide text-[var(--td-muted)] opacity-40">
+                          {group.deckCount} decks
+                        </span>
                       </div>
-                      <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
-                      <p className="mt-2 line-clamp-2 text-base font-medium leading-6 text-[var(--td-text)]">
-                        {deck.trigger ? deck.trigger : "（要約なし）"}
-                      </p>
+                      {group.memoryCue && (
+                        <p className="mt-0.5 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
+                          {group.memoryCue}
+                        </p>
+                      )}
+                      {formatRelativeTime(group.latestUpdatedAt) && (
+                        <p className="mt-0.5 text-xs text-[var(--td-muted)] opacity-45">
+                          {formatRelativeTime(group.latestUpdatedAt)}
+                        </p>
+                      )}
                     </div>
+                  )}
 
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        onClick={(event) => removeDeck(event, key)}
-                        className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                  {group.items.map((deck) => {
+                    const key = deckKey(deck);
+
+                    return (
+                      <article
+                        key={key}
+                        onClick={() => openDeck(deck)}
+                        className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-5 transition-[border-color,background-color,box-shadow] duration-300 ease-out hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:shadow-[0_8px_20px_rgba(15,23,42,0.22)] sm:p-4 ${
+                          highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
+                        }`}
                       >
-                        削除
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
+                            <h2 className="min-w-0 flex-1 truncate text-sm leading-6 text-[var(--td-muted)] sm:leading-normal">
+                              {deck.title}
+                            </h2>
+                            <div className="flex shrink-0 gap-0.5">
+                              {[1, 2, 3, 4, 5].map((value) => (
+                                <button
+                                  key={value}
+                                  onClick={(event) => updateStar(event, key, value)}
+                                  className={`text-sm transition hover:text-yellow-300 ${
+                                    value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
+                                  }`}
+                                  title={`${value} stars`}
+                                >
+                                  ★
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
+                          <p className="mt-2 line-clamp-2 text-base font-medium leading-7 text-[var(--td-text)] sm:leading-6">
+                            {deck.trigger ? deck.trigger : "（要約なし）"}
+                          </p>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            onClick={(event) => removeDeck(event, key)}
+                            className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ))
             )}
           </section>
 
@@ -1709,6 +1873,19 @@ export default function Home(props: HomeProps) {
   const [showSaveMenu, setShowSaveMenu] = useState(false);
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
+  const rawContext = searchParams.context;
+  const context =
+    Array.isArray(rawContext) ? rawContext[0] : rawContext;
+  const contextLabel =
+    context ? context.replaceAll("/", " / ") : "";
+  const rawSiblings = searchParams.siblings;
+  const siblings =
+    (Array.isArray(rawSiblings) ? rawSiblings[0] : rawSiblings)
+      ?.split("|")
+      .filter(Boolean) ?? [];
+  const rawCurrentTitle = searchParams.currentTitle;
+  const currentTitle =
+    Array.isArray(rawCurrentTitle) ? rawCurrentTitle[0] : rawCurrentTitle;
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
   const hasShownInputGuide = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2802,6 +2979,34 @@ export default function Home(props: HomeProps) {
             </a>
           </h1>
           <p className="text-[11pt] text-[var(--td-muted)]">Think. Deck. Share.</p>
+          {contextLabel && (
+            <p className="mt-1 truncate text-[10pt] text-[var(--td-muted)]">
+              {contextLabel}
+            </p>
+          )}
+          {siblings.length > 0 && (
+            <div className="mt-1 flex max-w-[48rem] flex-wrap items-center gap-x-2 gap-y-0.5 text-[10pt] text-[var(--td-muted)] opacity-70">
+              {siblings.map((title, index) => {
+                const isCurrent = title === currentTitle;
+
+                return (
+                  <span
+                    key={`${title}-${index}`}
+                    className={`inline-flex items-center gap-2 ${
+                      isCurrent
+                        ? "rounded px-1 font-medium text-[var(--td-text-soft)] underline decoration-[var(--td-accent)]/35 decoration-1 underline-offset-4 opacity-90 shadow-[0_0_14px_rgba(96,165,250,0.12)] bg-[var(--td-accent-bg)]/30"
+                        : ""
+                    }`}
+                  >
+                    {index > 0 && (
+                      <span aria-hidden="true">·</span>
+                    )}
+                    {title}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2">
@@ -3389,6 +3594,7 @@ type BuildThoughtDeckMdArgs = {
   memo: string;
   output: string;
   deckId: string | null;
+  contextId?: string | null;
   lineage?: DeckLineage;
   publication?: DeckPublication;
   share?: DeckShare;
@@ -3496,6 +3702,7 @@ export function buildThoughtDeckMd({
   memo,
   output,
   deckId,
+  contextId,
   lineage,
   publication,
   share,
@@ -3574,6 +3781,7 @@ version: 1
 
 user_id: ${userId}
 deck_id: ${deckIdFinal}
+${contextId ? `context_id: ${yamlSafe(contextId)}\n` : ""}
 
 created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"
@@ -3815,6 +4023,86 @@ export type DeckState = {
   addedCards: AddedCard[];
   theme: ThemeMode;
 };
+
+
+====================
+FILE: lib/groupDecksByPath.ts
+====================
+
+export type GroupableDeck = {
+  relativePath?: string;
+  updated_at?: string;
+  created_at?: string;
+  trigger?: string;
+};
+
+export type DeckGroup<T> = {
+  groupKey: string;
+  latestUpdatedAt: string;
+  memoryCue: string;
+  deckCount: number;
+  items: T[];
+};
+
+const UNGROUPED_GROUP_KEY = "Ungrouped";
+
+function getGroupKey(relativePath?: string) {
+  if (!relativePath) {
+    return UNGROUPED_GROUP_KEY;
+  }
+
+  const lastSeparatorIndex = relativePath.lastIndexOf("/");
+
+  if (lastSeparatorIndex <= 0) {
+    return UNGROUPED_GROUP_KEY;
+  }
+
+  return relativePath.slice(0, lastSeparatorIndex);
+}
+
+function getDeckUpdatedAt(deck: GroupableDeck) {
+  return deck.updated_at || deck.created_at || "";
+}
+
+function getTime(value: string) {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+export function groupDecksByPath<T extends GroupableDeck>(
+  decks: T[],
+): DeckGroup<T>[] {
+  const groups = new Map<string, DeckGroup<T>>();
+
+  for (const deck of decks) {
+    const groupKey = getGroupKey(deck.relativePath);
+    const existingGroup = groups.get(groupKey);
+
+    if (existingGroup) {
+      existingGroup.items.push(deck);
+      existingGroup.deckCount = existingGroup.items.length;
+
+      const updatedAt = getDeckUpdatedAt(deck);
+
+      if (getTime(updatedAt) > getTime(existingGroup.latestUpdatedAt)) {
+        existingGroup.latestUpdatedAt = updatedAt;
+        existingGroup.memoryCue = deck.trigger ?? "";
+      }
+
+      continue;
+    }
+
+    groups.set(groupKey, {
+      groupKey,
+      latestUpdatedAt: getDeckUpdatedAt(deck),
+      memoryCue: deck.trigger ?? "",
+      deckCount: 1,
+      items: [deck],
+    });
+  }
+
+  return Array.from(groups.values());
+}
 
 
 ====================

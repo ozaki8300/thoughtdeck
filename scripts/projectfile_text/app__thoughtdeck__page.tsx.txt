@@ -204,6 +204,19 @@ export default function Home(props: HomeProps) {
   const [showSaveMenu, setShowSaveMenu] = useState(false);
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
+  const rawContext = searchParams.context;
+  const context =
+    Array.isArray(rawContext) ? rawContext[0] : rawContext;
+  const contextLabel =
+    context ? context.replaceAll("/", " / ") : "";
+  const rawSiblings = searchParams.siblings;
+  const siblings =
+    (Array.isArray(rawSiblings) ? rawSiblings[0] : rawSiblings)
+      ?.split("|")
+      .filter(Boolean) ?? [];
+  const rawCurrentTitle = searchParams.currentTitle;
+  const currentTitle =
+    Array.isArray(rawCurrentTitle) ? rawCurrentTitle[0] : rawCurrentTitle;
   const [isReadOnly, setIsReadOnly] = useState(snapshotReadOnly);
   const hasShownInputGuide = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1297,6 +1310,34 @@ export default function Home(props: HomeProps) {
             </a>
           </h1>
           <p className="text-[11pt] text-[var(--td-muted)]">Think. Deck. Share.</p>
+          {contextLabel && (
+            <p className="mt-1 truncate text-[10pt] text-[var(--td-muted)]">
+              {contextLabel}
+            </p>
+          )}
+          {siblings.length > 0 && (
+            <div className="mt-1 flex max-w-[48rem] flex-wrap items-center gap-x-2 gap-y-0.5 text-[10pt] text-[var(--td-muted)] opacity-70">
+              {siblings.map((title, index) => {
+                const isCurrent = title === currentTitle;
+
+                return (
+                  <span
+                    key={`${title}-${index}`}
+                    className={`inline-flex items-center gap-2 ${
+                      isCurrent
+                        ? "rounded px-1 font-medium text-[var(--td-text-soft)] underline decoration-[var(--td-accent)]/35 decoration-1 underline-offset-4 opacity-90 shadow-[0_0_14px_rgba(96,165,250,0.12)] bg-[var(--td-accent-bg)]/30"
+                        : ""
+                    }`}
+                  >
+                    {index > 0 && (
+                      <span aria-hidden="true">·</span>
+                    )}
+                    {title}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2">
