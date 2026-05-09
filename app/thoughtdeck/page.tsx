@@ -448,6 +448,7 @@ export default function Home(props: HomeProps) {
   }, [raw, memo, output, isRestoredFromUrl]);
 
   const openMemoEditor = () => {
+    setShowRight(true);
     setSelectedCardId("td-memo");
     setLastActivePanel("td-memo");
     setExpandedEditor("memo");
@@ -568,18 +569,15 @@ export default function Home(props: HomeProps) {
       if (isModifierShortcut && key === "e") {
         e.preventDefault();
 
-        if (expandedEditor === null) {
-          setShowLeft(true);
-          setSelectedCardId("td-input");
-          setLastActivePanel("td-input");
-          setExpandedEditor("input");
-        } else if (expandedEditor === "memo") {
-          setShowLeft(true);
-          setSelectedCardId("td-input");
-          setLastActivePanel("td-input");
-          setExpandedEditor("input");
-        } else {
+        if (expandedEditor) {
+          setExpandedEditor(null);
+        } else if (lastActivePanel === "td-memo") {
           openMemoEditor();
+        } else {
+          setShowLeft(true);
+          setSelectedCardId("td-input");
+          setLastActivePanel("td-input");
+          setExpandedEditor("input");
         }
       }
 
@@ -1806,30 +1804,33 @@ export default function Home(props: HomeProps) {
                     <h2 className="text-[13pt] font-bold text-[var(--td-text)]">メモ</h2>
                     <div className="flex items-center gap-2">
                       {!isReadOnly && (
-                        <div className="flex items-center gap-1 rounded-lg border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-0.5">
-                          <button
-                            onClick={() => setMemoMode("edit")}
-                            aria-pressed={memoMode === "edit"}
-                            className={`rounded-md px-2.5 py-1 text-[11pt] transition ${
-                              memoMode === "edit"
-                                ? "bg-[var(--td-hover)] text-[var(--td-text)]"
-                                : "text-[var(--td-text-soft)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-                            }`}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setMemoMode("preview")}
-                            aria-pressed={memoMode === "preview"}
-                            className={`rounded-md px-2.5 py-1 text-[11pt] transition ${
-                              memoMode === "preview"
-                                ? "bg-[var(--td-hover)] text-[var(--td-text)]"
-                                : "text-[var(--td-text-soft)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-                            }`}
-                          >
-                            Preview
-                          </button>
-                        </div>
+                        <>
+                          <button onClick={openMemoEditor} className={panelButtonClass}>編集 <span className="shortcut">(Ctrl+E)</span></button>
+                          <div className="flex items-center gap-1 rounded-lg border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-0.5">
+                            <button
+                              onClick={() => setMemoMode("edit")}
+                              aria-pressed={memoMode === "edit"}
+                              className={`rounded-md px-2.5 py-1 text-[11pt] transition ${
+                                memoMode === "edit"
+                                  ? "bg-[var(--td-hover)] text-[var(--td-text)]"
+                                  : "text-[var(--td-text-soft)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                              }`}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setMemoMode("preview")}
+                              aria-pressed={memoMode === "preview"}
+                              className={`rounded-md px-2.5 py-1 text-[11pt] transition ${
+                                memoMode === "preview"
+                                  ? "bg-[var(--td-hover)] text-[var(--td-text)]"
+                                  : "text-[var(--td-text-soft)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                              }`}
+                            >
+                              Preview
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
