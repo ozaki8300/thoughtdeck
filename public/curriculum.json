@@ -1,223 +1,599 @@
 {
   "globis": {
-    "leadership": {
-      "label": "Leadership",
-      "basic": {
-        "OBH": {
-          "name": "組織行動とリーダーシップ",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "HRM": {
-          "name": "人材マネジメント",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
+    "label": "Globis MBA",
+    "subjects": {
+      "OBH": {
+        "name": "組織行動とリーダーシップ",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
         }
       },
-      "advanced": {
-        "PWI": {
-          "name": "パワーと影響力",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "OTR": {
-          "name": "リスキリングと組織トランスフォーメーション",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day6"
-          }
-        }
-      }
-    },
-    "strategy-marketing": {
-      "label": "Strategy & Marketing",
-      "basic": {
-        "EMS": {
-          "name": "マーケティング・経営戦略基礎",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": null
-          }
-        },
-        "MKT": {
-          "name": "マーケティング",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "STR": {
-          "name": "経営戦略",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        }
-      }
-    },
-    "accounting-finance": {
-      "label": "Accounting & Finance",
-      "basic": {
-        "EA": {
-          "name": "アカウンティング基礎",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": null
-          }
-        },
-        "EF": {
-          "name": "ファイナンス基礎",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": null
-          }
-        },
-        "MAC": {
-          "name": "アカウンティングI（財務会計）",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "FIN": {
-          "name": "ファイナンスⅠ（事業戦略と企業財務）",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
+      "HRM": {
+        "name": "人材マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
         }
       },
-      "advanced": {
-        "MGA": {
-          "name": "アカウンティングII（管理会計）",
-          "credits": 1.5,
-          "required": true,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "ADF": {
-          "name": "ファイナンスII（企業価値評価と財務戦略）",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "CMF": {
-          "name": "ファイナンスⅢ（企業の合併と買収）",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        }
-      }
-    },
-    "critical-thinking": {
-      "label": "Critical Thinking",
-      "basic": {
-        "CRT": {
-          "name": "クリティカル・シンキング",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "BAN": {
-          "name": "ビジネス・アナリティクス",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        }
-      }
-    },
-    "technovate": {
-      "label": "Technovate",
-      "basic": {
-        "ET": {
-          "name": "テクノベート基礎",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": null
-          }
-        },
-        "TCT": {
-          "name": "テクノベート・シンキング",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
+      "PWI": {
+        "name": "パワーと影響力",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
         }
       },
-      "advanced": {
-        "ADS": {
-          "name": "AI＆データサイエンス",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day4"
-          }
-        },
-        "TST": {
-          "name": "テクノベート・ストラテジー",
-          "credits": 1.5,
-          "timeline": {
-            "start": "Day1",
-            "end": "Day6",
-            "report_due": "Day6"
-          }
+      "OTR": {
+        "name": "リスキリングと組織トランスフォーメーション",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "SML": {
+        "name": "サスティナブル経営とリーダーシップ",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "LMH": {
+        "name": "リーダーシップとメンタルヘルス",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "EMS": {
+        "name": "マーケティング・経営戦略基礎",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "MKT": {
+        "name": "マーケティング",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "STR": {
+        "name": "経営戦略",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "BOM": {
+        "name": "オペレーション戦略",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "CJB": {
+        "name": "カスタマージャーニーとブランディング",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "SVM": {
+        "name": "サービス・マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "DIB": {
+        "name": "デザイン経営（デザイン駆動型のイノベーションとブランディング）【Produced by Takram】",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "EA": {
+        "name": "アカウンティング基礎",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "EF": {
+        "name": "ファイナンス基礎",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "MAC": {
+        "name": "アカウンティングI（財務会計）",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "FIN": {
+        "name": "ファイナンスⅠ（事業戦略と企業財務）",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "MGA": {
+        "name": "アカウンティングII（管理会計）",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "ADF": {
+        "name": "ファイナンスII（企業価値評価と財務戦略）",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "CMF": {
+        "name": "ファイナンスⅢ（企業の合併と買収）",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "CRT": {
+        "name": "クリティカル・シンキング",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "BAN": {
+        "name": "ビジネス・アナリティクス",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "FAN": {
+        "name": "ファシリテーション＆ネゴシエーション",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "BUP": {
+        "name": "ビジネス・プレゼンテーション",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "STC": {
+        "name": "戦略コミュニケーション",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "LEV": {
+        "name": "リーダーシップ開発と倫理・価値観",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "ENL": {
+        "name": "企業家リーダーシップ",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "CPV": {
+        "name": "企業の理念と社会的価値",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "KDJ": {
+        "name": "経営道場",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "ET": {
+        "name": "テクノベート基礎（デジタル時代のビジネスリテラシー）",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "TCT": {
+        "name": "テクノベート・シンキング",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "DTU": {
+        "name": "デザイン思考と体験価値",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "TST": {
+        "name": "テクノベート・ストラテジー",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "PDM": {
+        "name": "テクノベート・プロダクトマネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "ADS": {
+        "name": "AI＆データサイエンス",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "TL": {
+        "name": "テクノロジー・リーンスタートアップ",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "DP": {
+        "name": "デジタル・プロトタイピング",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "TVB": {
+        "name": "テクノベート・ビジネスモデル論",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "CFB": {
+        "name": "ビジネス・サイバーセキュリティ",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "VTM": {
+        "name": "ベンチャー・マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "VTS": {
+        "name": "ベンチャー戦略プランニング",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "VCF": {
+        "name": "ベンチャー・キャピタル＆ファイナンス",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "SCV": {
+        "name": "ソーシャル・ベンチャー・マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "BTI": {
+        "name": "イノベーションによる事業構造変革",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "SRO": {
+        "name": "ストラテジック・リオーガニゼーション",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "FRO": {
+        "name": "ファイナンシャル・リオーガニゼーション",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "GAC": {
+        "name": "日本・アジア企業のグローバル化戦略",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "GP": {
+        "name": "グローバル・パースペクティブ",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "CCM": {
+        "name": "異文化マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "FBM": {
+        "name": "ファミリービジネス・マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "SMT": {
+        "name": "スポーツ・マネジメント",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "PCT": {
+        "name": "製薬企業の構造改革",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "REP": {
+        "name": "研究・起業プロジェクト (リサーチプラン)",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
+        }
+      },
+      "INC": {
+        "name": "研究・起業プロジェクト (G-INCUBATE)",
+        "units": {
+          "Day1": {},
+          "Day2": {},
+          "Day3": {},
+          "Day4": {},
+          "Day5": {},
+          "Day6": {}
         }
       }
     }

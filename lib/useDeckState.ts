@@ -7,7 +7,12 @@ import {
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "./deckTypes";
 import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
-import { buildCurriculumPath } from "./curriculum";
+import {
+  buildCurriculumIndex,
+  buildCurriculumPath,
+  loadCurriculum,
+  type CurriculumIndexItem,
+} from "./curriculum";
 import { getTitle } from "./deckParser";
 import { createDeck, createPublicationSnapshot, createWorkspaceRevision, deckExists } from "./deckService";
 import { useCloudSave } from "./useCloudSave";
@@ -889,6 +894,21 @@ export function useDeckState(props?: UseDeckStateProps) {
   ] = useState(false);
 
   const [
+    curriculumIndex,
+    setCurriculumIndex,
+  ] = useState<CurriculumIndexItem[]>([]);
+
+  const [
+    curriculumSearch,
+    setCurriculumSearch,
+  ] = useState("");
+
+  const [
+    selectedCurriculum,
+    setSelectedCurriculum,
+  ] = useState<CurriculumIndexItem | null>(null);
+
+  const [
     forkedFromDeckId,
     setForkedFromDeckId,
   ] = useState("");
@@ -904,6 +924,47 @@ export function useDeckState(props?: UseDeckStateProps) {
       new URLSearchParams(window.location.search).get("ro") === "1");
 
   const perspective = placeholderSets[perspectiveIndex];
+
+  const filteredCurriculum =
+    useMemo(() => {
+      const q =
+        curriculumSearch
+          .trim()
+          .toLowerCase();
+
+      if (!q) {
+        return curriculumIndex;
+      }
+
+      return curriculumIndex.filter(
+        (item) =>
+          item.code
+            .toLowerCase()
+            .includes(q) ||
+          item.label
+            .toLowerCase()
+            .includes(q),
+      );
+    }, [
+      curriculumSearch,
+      curriculumIndex,
+    ]);
+
+  const availableDays =
+    useMemo(
+      () => {
+        if (!selectedCurriculum) return [];
+
+        const days = Object.keys(
+          selectedCurriculum.units ?? {},
+        );
+
+        return days.length > 0
+          ? days
+          : [selectedCurriculum.unit];
+      },
+      [selectedCurriculum],
+    );
 
   const openOutputComposer = () => {
     setSelectedCardId("td-output");
@@ -1516,6 +1577,16 @@ export function useDeckState(props?: UseDeckStateProps) {
       registry[groupId] || ["main"],
     );
   }, [groupId, lineId]);
+
+  useEffect(() => {
+    loadCurriculum()
+      .then((data) => {
+        setCurriculumIndex(
+          buildCurriculumIndex(data),
+        );
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     try {
@@ -2187,6 +2258,14 @@ export function useDeckState(props?: UseDeckStateProps) {
     setUnit,
     showCurriculumModal,
     setShowCurriculumModal,
+    curriculumIndex,
+    setCurriculumIndex,
+    curriculumSearch,
+    setCurriculumSearch,
+    selectedCurriculum,
+    setSelectedCurriculum,
+    filteredCurriculum,
+    availableDays,
     availableLines,
     setAvailableLines,
     switchLine,

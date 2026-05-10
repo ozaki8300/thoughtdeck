@@ -7,7 +7,6 @@ import { AboutModal } from "../../components/AboutModal";
 import { PDFViewer } from "../../components/PDFViewer";
 import { QRModal } from "../../components/QRModal";
 import { ShortcutHelp } from "../../components/ShortcutHelp";
-import type { CurriculumUniverse } from "../../lib/curriculum";
 
 import {
   THOUGHTDECK_HOME_URL,
@@ -223,8 +222,6 @@ export default function Home(props: HomeProps) {
   const [openAbout, setOpenAbout] = useState(false);
   const [isRestoredFromUrl, setIsRestoredFromUrl] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
-  const [curriculum, setCurriculum] =
-    useState<CurriculumUniverse>({});
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const rawContext = searchParams.context;
@@ -282,6 +279,12 @@ export default function Home(props: HomeProps) {
     setUnit,
     showCurriculumModal,
     setShowCurriculumModal,
+    curriculumSearch,
+    setCurriculumSearch,
+    selectedCurriculum,
+    setSelectedCurriculum,
+    filteredCurriculum,
+    availableDays,
     availableLines,
     switchLine,
     forkedFromDeckId,
@@ -388,18 +391,6 @@ export default function Home(props: HomeProps) {
     "border-[var(--td-card-border)] bg-[var(--td-card-bg)] text-[var(--td-text)] hover:border-[var(--td-border-strong)] hover:shadow-[0_6px_18px_rgba(15,23,42,0.18)]";
   const isPublishedSnapshot =
     isReadOnly;
-  const genreOptions = Object.keys(curriculum);
-  const subjectOptions =
-    genre ? Object.keys(curriculum[genre] ?? {}) : [];
-  const selectedSubjectData =
-    genre && subject ? curriculum[genre]?.[subject] : undefined;
-  const unitOptions =
-    selectedSubjectData
-      ? [
-          ...Object.keys(selectedSubjectData.basic ?? {}),
-          ...Object.keys(selectedSubjectData.advanced ?? {}),
-        ]
-      : [];
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -490,19 +481,6 @@ export default function Home(props: HomeProps) {
     setLineId,
     setForkedFromDeckId,
   ]);
-
-  useEffect(() => {
-    fetch("/curriculum.json")
-      .then((response) => {
-        if (!response.ok) throw new Error("Failed to load curriculum.json");
-        return response.json() as Promise<CurriculumUniverse>;
-      })
-      .then(setCurriculum)
-      .catch((error) => {
-        console.error(error);
-        setCurriculum({});
-      });
-  }, []);
 
   useEffect(() => {
     if (isRestoredFromUrl) return;
@@ -1803,7 +1781,7 @@ export default function Home(props: HomeProps) {
 
       {showCurriculumModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl">
+          <div className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl">
             <div className="mb-4">
               <h2 className="text-[14pt] font-semibold text-[var(--td-text)]">
                 Obsidianに保存
@@ -1813,72 +1791,103 @@ export default function Home(props: HomeProps) {
               </p>
             </div>
 
-            <div className="mt-4 grid gap-3">
-              <label className="grid gap-1 text-[10.5pt] text-[var(--td-muted)]">
-                Genre
-                <select
-                  value={genre}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setGenre(event.target.value);
-                    setSubject("");
-                    setUnit("");
-                  }}
-                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
-                >
-                  <option value="">Select genre</option>
-                  {genreOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div className="mt-4 space-y-3">
+              <input
+                value={curriculumSearch}
+                onChange={(event) => {
+                  event.stopPropagation();
+                  setCurriculumSearch(event.target.value);
+                }}
+                placeholder="科目を検索（OBH / FIN / ADS）"
+                className="w-full rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
+              />
 
-              <label className="grid gap-1 text-[10.5pt] text-[var(--td-muted)]">
-                Subject
-                <select
-                  value={subject}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setSubject(event.target.value);
-                    setUnit("");
-                  }}
-                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
-                >
-                  <option value="">Select subject</option>
-                  {subjectOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="max-h-[75vh] overflow-y-auto">
+                <div className="mb-3 text-xs text-[var(--td-muted)]">
+                  {filteredCurriculum.length}
+                  {" "}
+                  subjects
+                </div>
 
-              <label className="grid gap-1 text-[10.5pt] text-[var(--td-muted)]">
-                Unit
-                <select
-                  value={unit}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setUnit(event.target.value);
-                  }}
-                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
-                >
-                  <option value="">Select unit</option>
-                  {(Array.isArray(unitOptions) ? unitOptions : []).map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredCurriculum.map((item) => {
+                    const resolvedSubject =
+                      item.category === "subject"
+                        ? item.code
+                        : item.subject;
+                    const isSelected =
+                      genre === item.genre &&
+                      subject === resolvedSubject;
+
+                    return (
+                      <div
+                        key={`${item.genre}-${item.subject}`}
+                        className={`rounded-xl border p-3 text-left transition ${
+                          isSelected
+                            ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)]"
+                            : "border-[var(--td-border)] bg-[var(--td-card-bg)] hover:bg-[var(--td-hover)]"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCurriculum(item);
+                            setGenre(item.genre);
+                            setSubject(resolvedSubject);
+                            setUnit("");
+                          }}
+                          className="w-full text-left"
+                        >
+                          <div className="font-semibold text-[var(--td-text)]">
+                            {item.code}
+                          </div>
+
+                          <div className="text-sm text-[var(--td-text-soft)]">
+                            {item.label}
+                          </div>
+
+                          <div className="mt-1 text-xs text-[var(--td-muted)]">
+                            {item.subject}
+                          </div>
+                        </button>
+
+                        {isSelected && (
+                          <div className="mt-3 space-y-2">
+                            <div className="text-sm font-medium text-[var(--td-muted)]">
+                              Dayを選択
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {availableDays.map((day) => (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => setUnit(day)}
+                                  className={`rounded-xl border px-3 py-2 text-sm transition ${
+                                    unit === day
+                                      ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]"
+                                      : "border-[var(--td-border)] text-[var(--td-text-soft)] hover:bg-[var(--td-hover)]"
+                                  }`}
+                                >
+                                  {day}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
+                  setCurriculumSearch("");
+                  setSelectedCurriculum(null);
                   setShowCurriculumModal(false);
                 }}
                 className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
@@ -1888,14 +1897,18 @@ export default function Home(props: HomeProps) {
               <button
                 type="button"
                 onClick={async () => {
+                  if (!selectedCurriculum || !unit) return;
+
                   await executeObsidianSave({
                     genre,
                     subject,
                     unit,
                   });
+                  setCurriculumSearch("");
+                  setSelectedCurriculum(null);
                   setShowCurriculumModal(false);
                 }}
-                disabled={Boolean((genre || subject || unit) && (!genre || !subject || !unit))}
+                disabled={!selectedCurriculum || !unit}
                 className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-[11pt] text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save

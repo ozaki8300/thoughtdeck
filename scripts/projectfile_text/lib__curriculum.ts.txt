@@ -21,10 +21,37 @@ export type CurriculumSubject = {
   advanced?: Record<string, CurriculumUnit>;
 };
 
+export type CurriculumSubjectCode = {
+  name?: string;
+  credits?: number;
+  required?: boolean;
+  units?: Record<string, unknown>;
+};
+
+export type CurriculumSubjectGroup = {
+  label?: string;
+  subjects?: Record<string, CurriculumSubjectCode>;
+};
+
 export type CurriculumUniverse = Record<
   string,
-  Record<string, CurriculumSubject>
+  CurriculumSubjectGroup | Record<string, CurriculumSubject>
 >;
+
+export type CurriculumIndexItem = {
+  code: string;
+  label: string;
+
+  genre: string;
+  subject: string;
+  unit: string;
+
+  category: "basic" | "advanced" | "subject";
+
+  credits?: number;
+  required?: boolean;
+  units?: Record<string, unknown>;
+};
 
 export async function loadCurriculum(): Promise<CurriculumUniverse> {
   const response = await fetch("/curriculum.json");
@@ -34,6 +61,68 @@ export async function loadCurriculum(): Promise<CurriculumUniverse> {
   }
 
   return response.json();
+}
+
+export function buildCurriculumIndex(
+  curriculum: CurriculumUniverse,
+): CurriculumIndexItem[] {
+  const items: CurriculumIndexItem[] = [];
+
+  for (const [genre, genreData] of Object.entries(curriculum)) {
+    if ("subjects" in genreData && genreData.subjects) {
+      for (const [code, subjectData] of Object.entries(genreData.subjects)) {
+        items.push({
+          code,
+          label: subjectData.name ?? code,
+          genre,
+          subject: code,
+          unit: code,
+          category: "subject",
+          credits: subjectData.credits,
+          required: subjectData.required,
+          units: subjectData.units,
+        });
+      }
+
+      continue;
+    }
+
+    const subjects = genreData as Record<string, CurriculumSubject>;
+
+    for (const [subject, subjectData] of Object.entries(subjects)) {
+      for (const category of ["basic", "advanced"] as const) {
+        const units = subjectData[category] ?? {};
+
+        for (const [code, unitData] of Object.entries(units)) {
+          items.push({
+            code,
+            label: unitData.name ?? code,
+            genre,
+            subject,
+            unit: code,
+            category,
+            credits: unitData.credits,
+            required: unitData.required,
+          });
+        }
+      }
+    }
+  }
+
+  return items.sort((a, b) =>
+    a.code.localeCompare(b.code),
+  );
+}
+
+export function resolveCurriculumUnit(
+  curriculumIndex: CurriculumIndexItem[],
+  code: string,
+) {
+  return curriculumIndex.find(
+    (item) =>
+      item.code.toLowerCase() ===
+      code.toLowerCase(),
+  );
 }
 
 export function buildCurriculumPath(
