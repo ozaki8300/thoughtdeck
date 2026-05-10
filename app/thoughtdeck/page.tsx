@@ -241,6 +241,7 @@ export default function Home(props: HomeProps) {
   const hasShownInputGuide = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
+  const curriculumModalRef = useRef<HTMLDivElement | null>(null);
   const mergedProps = {
     ...props,
     readOnly: props.readOnly || isReadOnly,
@@ -387,6 +388,16 @@ export default function Home(props: HomeProps) {
     createShare,
     copyTemplateBundle,
   } = useDeckState(mergedProps);
+
+  useEffect(() => {
+    if (showCurriculumModal && window.innerWidth < 1024) {
+      curriculumModalRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [showCurriculumModal]);
+
   const quietBaseCardClass =
     "border-[var(--td-card-border)] bg-[var(--td-card-bg)] text-[var(--td-text)] hover:border-[var(--td-border-strong)] hover:shadow-[0_6px_18px_rgba(15,23,42,0.18)]";
   const isPublishedSnapshot =
@@ -1780,7 +1791,10 @@ export default function Home(props: HomeProps) {
       <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
       {showCurriculumModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
+        <div
+          ref={curriculumModalRef}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4"
+        >
           <div className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl">
             <div className="mb-4">
               <h2 className="text-[14pt] font-semibold text-[var(--td-text)]">
