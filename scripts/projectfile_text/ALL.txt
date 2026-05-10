@@ -368,6 +368,10 @@ const IGNORE_FOLDERS = new Set([
   "image",
 ]);
 
+const canUseDirectoryPicker = () =>
+  typeof window !== "undefined" &&
+  "showDirectoryPicker" in window;
+
 type ScanStats = {
   scanned: number;
   thoughtDecks: number;
@@ -955,6 +959,13 @@ export default function MyDecksPage() {
   }, []);
 
   const pickVault = async () => {
+    if (!canUseDirectoryPicker()) {
+      setImportMessage(
+        "この端末ではVault選択は利用できません。Markdownの取り込みを使ってください。",
+      );
+      return;
+    }
+
     try {
       const handle =
         await window.showDirectoryPicker();
@@ -1146,6 +1157,13 @@ export default function MyDecksPage() {
   };
 
   const scanVault = async () => {
+    if (!canUseDirectoryPicker()) {
+      setImportMessage(
+        "この端末ではVaultスキャンは利用できません。Markdownの取り込みを使ってください。",
+      );
+      return;
+    }
+
     if (!vaultHandle) {
       setImportMessage("先にVaultを選択してください");
       return;
@@ -1405,20 +1423,9 @@ export default function MyDecksPage() {
                 >
                   取り込む
                 </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={pickVault}
-                    className="rounded-lg border border-[var(--td-border-strong)] px-3 py-2 text-sm text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                  >
-                    📁 Vaultを選択
-                  </button>
-                  <button
-                    onClick={scanVault}
-                    className="rounded-lg border border-[var(--td-border-strong)] px-3 py-2 text-sm text-[var(--td-text)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                  >
-                    🔄 スキャン
-                  </button>
-                </div>
+                <p className="text-xs text-[var(--td-muted)]">
+                  スマホではMarkdownファイルを選択して取り込んでください
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
