@@ -2046,7 +2046,7 @@ export default function Home(props: HomeProps) {
                     <div className="flex items-center gap-2">
                       {!isReadOnly && (
                         <>
-                          <button onClick={openMemoEditor} className={panelButtonClass}>編集 <span className="shortcut">(Ctrl+E)</span></button>
+                          <button onClick={openMemoEditor} className={`${panelButtonClass} max-lg:hidden`}>編集 <span className="shortcut">(Ctrl+E)</span></button>
                           <div className="flex items-center gap-1 rounded-lg border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-0.5">
                             <button
                               onClick={() => setMemoMode("edit")}

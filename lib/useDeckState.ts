@@ -2011,6 +2011,15 @@ export function useDeckState(props?: UseDeckStateProps) {
 
   const saveToObsidian = () => {
     setShowCurriculumModal(true);
+
+    if (!isMobileLike()) return;
+
+    window.setTimeout(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }, 0);
   };
 
   const executeObsidianSave = async (curriculumOverride?: {
