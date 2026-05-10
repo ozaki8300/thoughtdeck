@@ -7,6 +7,7 @@ import {
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "./deckTypes";
 import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
+import { buildCurriculumPath } from "./curriculum";
 import { getTitle } from "./deckParser";
 import { createDeck, createPublicationSnapshot, createWorkspaceRevision, deckExists } from "./deckService";
 import { useCloudSave } from "./useCloudSave";
@@ -872,6 +873,20 @@ export function useDeckState(props?: UseDeckStateProps) {
 
   const [lineId, setLineId] =
     useState("main");
+
+  const [genre, setGenre] =
+    useState("");
+
+  const [subject, setSubject] =
+    useState("");
+
+  const [unit, setUnit] =
+    useState("");
+
+  const [
+    showCurriculumModal,
+    setShowCurriculumModal,
+  ] = useState(false);
 
   const [
     forkedFromDeckId,
@@ -1923,7 +1938,25 @@ export function useDeckState(props?: UseDeckStateProps) {
     window.setTimeout(() => setCopyStatus(""), 1800);
   };
 
-  const saveToObsidian = async () => {
+  const saveToObsidian = () => {
+    setShowCurriculumModal(true);
+  };
+
+  const executeObsidianSave = async (curriculumOverride?: {
+    genre: string;
+    subject: string;
+    unit: string;
+  }) => {
+    const activeGenre =
+      curriculumOverride?.genre ??
+      genre;
+    const activeSubject =
+      curriculumOverride?.subject ??
+      subject;
+    const activeUnit =
+      curriculumOverride?.unit ??
+      unit;
+
     const savedSnapshot = JSON.parse(
       localStorage.getItem(STORAGE_KEY) || "{}",
     ) as Partial<DeckState>;
@@ -1954,10 +1987,21 @@ export function useDeckState(props?: UseDeckStateProps) {
         forkedFromDeckId:
           activeForkedFromDeckId,
       },
+      curriculum: {
+        genre: activeGenre,
+        subject: activeSubject,
+        unit: activeUnit,
+      },
     });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
-    const filePath = `ThoughtDeck/${fileTitle}`;
+    const curriculumPath =
+      buildCurriculumPath(
+        activeGenre,
+        activeSubject,
+        activeUnit,
+      );
+    const filePath = `${curriculumPath}/${fileTitle}`;
     const url = `obsidian://new?file=${encodeURIComponent(filePath)}&clipboard=true`;
 
     // 長いMarkdown本文をURIに直接詰めると、ブラウザやOSのURI長制限でObsidianが起動しないことがある。
@@ -1971,6 +2015,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     //   generateTriggerPreview(raw, memo, output),
     // );
     await new Promise((resolve) => setTimeout(resolve, 50));
+    setShowCurriculumModal(false);
     window.location.href = url;
   };
 
@@ -2134,6 +2179,14 @@ export function useDeckState(props?: UseDeckStateProps) {
     setGroupId,
     lineId,
     setLineId,
+    genre,
+    setGenre,
+    subject,
+    setSubject,
+    unit,
+    setUnit,
+    showCurriculumModal,
+    setShowCurriculumModal,
     availableLines,
     setAvailableLines,
     switchLine,
@@ -2257,6 +2310,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     downloadMd,
     copyMd,
     saveToObsidian,
+    executeObsidianSave,
     clearAll,
     loadDemo,
     confirmLoadDemo,

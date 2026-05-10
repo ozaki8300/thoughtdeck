@@ -2,9 +2,28 @@
 FILE: lib/curriculum.ts
 ====================
 
+export type CurriculumTimeline = {
+  start?: string;
+  end?: string;
+  report_due?: string;
+};
+
+export type CurriculumUnit = {
+  name?: string;
+  credits?: number;
+  required?: boolean;
+  timeline?: CurriculumTimeline;
+};
+
+export type CurriculumSubject = {
+  label?: string;
+  basic?: Record<string, CurriculumUnit>;
+  advanced?: Record<string, CurriculumUnit>;
+};
+
 export type CurriculumUniverse = Record<
   string,
-  Record<string, string[]>
+  Record<string, CurriculumSubject>
 >;
 
 export async function loadCurriculum(): Promise<CurriculumUniverse> {
@@ -18,11 +37,17 @@ export async function loadCurriculum(): Promise<CurriculumUniverse> {
 }
 
 export function buildCurriculumPath(
-  genre?: string,
-  subject?: string,
-  unit?: string,
+  genre?: string | null,
+  subject?: string | null,
+  unit?: string | null,
 ) {
+  // curriculum未選択時は従来thoughtdeck配下へ保存
+  if (!genre || !subject || !unit) {
+    return "thoughtdeck";
+  }
+
   return [
+    "thoughtdeck",
     genre,
     subject,
     unit,

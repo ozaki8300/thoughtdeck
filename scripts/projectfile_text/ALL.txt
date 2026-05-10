@@ -1729,6 +1729,7 @@ import { AboutModal } from "../../components/AboutModal";
 import { PDFViewer } from "../../components/PDFViewer";
 import { QRModal } from "../../components/QRModal";
 import { ShortcutHelp } from "../../components/ShortcutHelp";
+import type { CurriculumUniverse } from "../../lib/curriculum";
 
 import {
   THOUGHTDECK_HOME_URL,
@@ -1944,6 +1945,8 @@ export default function Home(props: HomeProps) {
   const [openAbout, setOpenAbout] = useState(false);
   const [isRestoredFromUrl, setIsRestoredFromUrl] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
+  const [curriculum, setCurriculum] =
+    useState<CurriculumUniverse>({});
   const searchParams = use(props.searchParams);
   const snapshotReadOnly = searchParams.ro === "1";
   const rawContext = searchParams.context;
@@ -1993,6 +1996,14 @@ export default function Home(props: HomeProps) {
     setGroupId,
     lineId,
     setLineId,
+    genre,
+    setGenre,
+    subject,
+    setSubject,
+    unit,
+    setUnit,
+    showCurriculumModal,
+    setShowCurriculumModal,
     availableLines,
     switchLine,
     forkedFromDeckId,
@@ -2086,6 +2097,7 @@ export default function Home(props: HomeProps) {
     togglePdf,
     downloadMd,
     saveToObsidian,
+    executeObsidianSave,
     clearAll,
     confirmLoadDemo,
     insertTemplate,
@@ -2098,6 +2110,18 @@ export default function Home(props: HomeProps) {
     "border-[var(--td-card-border)] bg-[var(--td-card-bg)] text-[var(--td-text)] hover:border-[var(--td-border-strong)] hover:shadow-[0_6px_18px_rgba(15,23,42,0.18)]";
   const isPublishedSnapshot =
     isReadOnly;
+  const genreOptions = Object.keys(curriculum);
+  const subjectOptions =
+    genre ? Object.keys(curriculum[genre] ?? {}) : [];
+  const selectedSubjectData =
+    genre && subject ? curriculum[genre]?.[subject] : undefined;
+  const unitOptions =
+    selectedSubjectData
+      ? [
+          ...Object.keys(selectedSubjectData.basic ?? {}),
+          ...Object.keys(selectedSubjectData.advanced ?? {}),
+        ]
+      : [];
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -2188,6 +2212,19 @@ export default function Home(props: HomeProps) {
     setLineId,
     setForkedFromDeckId,
   ]);
+
+  useEffect(() => {
+    fetch("/curriculum.json")
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to load curriculum.json");
+        return response.json() as Promise<CurriculumUniverse>;
+      })
+      .then(setCurriculum)
+      .catch((error) => {
+        console.error(error);
+        setCurriculum({});
+      });
+  }, []);
 
   useEffect(() => {
     if (isRestoredFromUrl) return;
@@ -3486,6 +3523,109 @@ export default function Home(props: HomeProps) {
       />
       <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
+      {showCurriculumModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl">
+            <div className="mb-4">
+              <h2 className="text-[14pt] font-semibold text-[var(--td-text)]">
+                Obsidianに保存
+              </h2>
+              <p className="mt-1 text-[10.5pt] text-[var(--td-muted)]">
+                保存先のcurriculumを選択します。
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-[10.5pt] text-[var(--td-muted)]">
+                Genre
+                <select
+                  value={genre}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    setGenre(event.target.value);
+                    setSubject("");
+                    setUnit("");
+                  }}
+                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
+                >
+                  <option value="">Select genre</option>
+                  {genreOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-[10.5pt] text-[var(--td-muted)]">
+                Subject
+                <select
+                  value={subject}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    setSubject(event.target.value);
+                    setUnit("");
+                  }}
+                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
+                >
+                  <option value="">Select subject</option>
+                  {subjectOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-[10.5pt] text-[var(--td-muted)]">
+                Unit
+                <select
+                  value={unit}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    setUnit(event.target.value);
+                  }}
+                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
+                >
+                  <option value="">Select unit</option>
+                  {(Array.isArray(unitOptions) ? unitOptions : []).map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCurriculumModal(false);
+                }}
+                className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await executeObsidianSave({
+                    genre,
+                    subject,
+                    unit,
+                  });
+                  setShowCurriculumModal(false);
+                }}
+                disabled={Boolean((genre || subject || unit) && (!genre || !subject || !unit))}
+                className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-[11pt] text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden max-lg:flex-col max-lg:overflow-visible">
         <PDFViewer
@@ -4058,9 +4198,28 @@ ${visible(output)}
 FILE: lib/curriculum.ts
 ====================
 
+export type CurriculumTimeline = {
+  start?: string;
+  end?: string;
+  report_due?: string;
+};
+
+export type CurriculumUnit = {
+  name?: string;
+  credits?: number;
+  required?: boolean;
+  timeline?: CurriculumTimeline;
+};
+
+export type CurriculumSubject = {
+  label?: string;
+  basic?: Record<string, CurriculumUnit>;
+  advanced?: Record<string, CurriculumUnit>;
+};
+
 export type CurriculumUniverse = Record<
   string,
-  Record<string, string[]>
+  Record<string, CurriculumSubject>
 >;
 
 export async function loadCurriculum(): Promise<CurriculumUniverse> {
@@ -4074,11 +4233,17 @@ export async function loadCurriculum(): Promise<CurriculumUniverse> {
 }
 
 export function buildCurriculumPath(
-  genre?: string,
-  subject?: string,
-  unit?: string,
+  genre?: string | null,
+  subject?: string | null,
+  unit?: string | null,
 ) {
+  // curriculum未選択時は従来thoughtdeck配下へ保存
+  if (!genre || !subject || !unit) {
+    return "thoughtdeck";
+  }
+
   return [
+    "thoughtdeck",
     genre,
     subject,
     unit,
@@ -5282,6 +5447,7 @@ import {
 
 import type { Area, PdfSide, PdfWorkMode, ThemeMode } from "./deckTypes";
 import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
+import { buildCurriculumPath } from "./curriculum";
 import { getTitle } from "./deckParser";
 import { createDeck, createPublicationSnapshot, createWorkspaceRevision, deckExists } from "./deckService";
 import { useCloudSave } from "./useCloudSave";
@@ -6147,6 +6313,20 @@ export function useDeckState(props?: UseDeckStateProps) {
 
   const [lineId, setLineId] =
     useState("main");
+
+  const [genre, setGenre] =
+    useState("");
+
+  const [subject, setSubject] =
+    useState("");
+
+  const [unit, setUnit] =
+    useState("");
+
+  const [
+    showCurriculumModal,
+    setShowCurriculumModal,
+  ] = useState(false);
 
   const [
     forkedFromDeckId,
@@ -7198,7 +7378,25 @@ export function useDeckState(props?: UseDeckStateProps) {
     window.setTimeout(() => setCopyStatus(""), 1800);
   };
 
-  const saveToObsidian = async () => {
+  const saveToObsidian = () => {
+    setShowCurriculumModal(true);
+  };
+
+  const executeObsidianSave = async (curriculumOverride?: {
+    genre: string;
+    subject: string;
+    unit: string;
+  }) => {
+    const activeGenre =
+      curriculumOverride?.genre ??
+      genre;
+    const activeSubject =
+      curriculumOverride?.subject ??
+      subject;
+    const activeUnit =
+      curriculumOverride?.unit ??
+      unit;
+
     const savedSnapshot = JSON.parse(
       localStorage.getItem(STORAGE_KEY) || "{}",
     ) as Partial<DeckState>;
@@ -7229,10 +7427,21 @@ export function useDeckState(props?: UseDeckStateProps) {
         forkedFromDeckId:
           activeForkedFromDeckId,
       },
+      curriculum: {
+        genre: activeGenre,
+        subject: activeSubject,
+        unit: activeUnit,
+      },
     });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
-    const filePath = `ThoughtDeck/${fileTitle}`;
+    const curriculumPath =
+      buildCurriculumPath(
+        activeGenre,
+        activeSubject,
+        activeUnit,
+      );
+    const filePath = `${curriculumPath}/${fileTitle}`;
     const url = `obsidian://new?file=${encodeURIComponent(filePath)}&clipboard=true`;
 
     // 長いMarkdown本文をURIに直接詰めると、ブラウザやOSのURI長制限でObsidianが起動しないことがある。
@@ -7246,6 +7455,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     //   generateTriggerPreview(raw, memo, output),
     // );
     await new Promise((resolve) => setTimeout(resolve, 50));
+    setShowCurriculumModal(false);
     window.location.href = url;
   };
 
@@ -7409,6 +7619,14 @@ export function useDeckState(props?: UseDeckStateProps) {
     setGroupId,
     lineId,
     setLineId,
+    genre,
+    setGenre,
+    subject,
+    setSubject,
+    unit,
+    setUnit,
+    showCurriculumModal,
+    setShowCurriculumModal,
     availableLines,
     setAvailableLines,
     switchLine,
@@ -7532,6 +7750,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     downloadMd,
     copyMd,
     saveToObsidian,
+    executeObsidianSave,
     clearAll,
     loadDemo,
     confirmLoadDemo,
