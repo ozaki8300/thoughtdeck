@@ -20,6 +20,7 @@ app/
 
 lib/
 ├── buildThoughtDeckMd.ts
+├── curriculum.ts
 ├── deckParser.ts
 ├── deckService.ts
 ├── deckTypes.ts

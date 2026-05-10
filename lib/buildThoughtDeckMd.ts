@@ -1,5 +1,20 @@
 import { buildRestoreUrl } from "./useDeckState";
 
+export type DeckCurriculum = {
+  genre?: string | null;
+  subject?: string | null;
+  unit?: string | null;
+};
+
+export type DeckIdentity = {
+  groupId?: string | null;
+  lineId?: string | null;
+};
+
+export type DeckMedia = {
+  imageRef?: string | null;
+};
+
 export type DeckLineage = {
   rootDeckId?: string | null;
   forkedFromDeckId?: string | null;
@@ -7,25 +22,19 @@ export type DeckLineage = {
   forkedFromShareId?: string | null;
 };
 
-export type DeckPublication = {
-  publicationId?: string | null;
-  publishedAt?: string | null;
-};
-
-export type DeckShare = {
-  shareId?: string | null;
-  sharedAt?: string | null;
-};
-
 type BuildThoughtDeckMdArgs = {
   raw: string;
   memo: string;
   output: string;
+
   deckId: string | null;
   contextId?: string | null;
+
   lineage?: DeckLineage;
-  publication?: DeckPublication;
-  share?: DeckShare;
+
+  curriculum?: DeckCurriculum;
+  identity?: DeckIdentity;
+  media?: DeckMedia;
 };
 
 const CREATED_AT_STORAGE_KEY = "thoughtdeck:created-at:v1";
@@ -129,51 +138,52 @@ export function buildThoughtDeckMd({
   raw,
   memo,
   output,
+
   deckId,
   contextId,
+
   lineage,
-  publication,
-  share,
+
+  curriculum,
+  identity,
+  media,
 }: BuildThoughtDeckMdArgs) {
   const userId = getUserId();
   // deck_id is semantic note continuity here, not Supabase persistence identity.
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
   const createdAt = getCreatedAt(deckIdFinal, now);
-  const lineageData = {
-    rootDeckId:
-      lineage?.rootDeckId ??
-      deckIdFinal,
+  const groupId =
+    identity?.groupId ||
+    deckIdFinal;
 
+  const lineId =
+    identity?.lineId ||
+    "main";
+
+  const curriculumData = {
+    genre:
+      curriculum?.genre ??
+      "",
+
+    subject:
+      curriculum?.subject ??
+      "",
+
+    unit:
+      curriculum?.unit ??
+      "",
+  };
+
+  const mediaData = {
+    imageRef:
+      media?.imageRef ??
+      "",
+  };
+
+  const lineageData = {
     forkedFromDeckId:
       lineage?.forkedFromDeckId ??
-      null,
-
-    forkedFromVersion:
-      lineage?.forkedFromVersion ??
-      null,
-
-    forkedFromShareId:
-      lineage?.forkedFromShareId ??
-      share?.shareId ??
-      null,
-  };
-  const publicationData = {
-    publicationId:
-      publication?.publicationId ??
-      null,
-
-    publishedAt:
-      publication?.publishedAt ??
-      null,
-  };
-  const shareData = {
-    shareId:
-      share?.shareId ??
-      null,
-
-    sharedAt:
-      share?.sharedAt ??
       null,
   };
   const thoughtdeckUrl = buildRestoreUrl(
@@ -183,50 +193,37 @@ export function buildThoughtDeckMd({
     [],
     [],
     deckIdFinal,
+    null,
+    null,
     {
-      publicationId:
-        publicationData.publicationId ??
-        undefined,
-
-      publishedAt:
-        publicationData.publishedAt ??
-        undefined,
-    },
-    {
-      shareId:
-        shareData.shareId ??
-        undefined,
-
-      sharedAt:
-        shareData.sharedAt ??
-        undefined,
+      groupId,
+      lineId,
+      forkedFromDeckId:
+        lineageData.forkedFromDeckId,
     },
   );
 
   return `---
 format: thoughtdeck
-version: 1
+version: 2
 
 user_id: ${userId}
 deck_id: ${deckIdFinal}
+
+group_id: ${yamlSafe(groupId)}
+line_id: ${yamlSafe(lineId)}
+forked_from_deck_id: ${lineageValue(lineageData.forkedFromDeckId)}
+
+genre: "${yamlSafe(curriculumData.genre)}"
+subject: "${yamlSafe(curriculumData.subject)}"
+unit: "${yamlSafe(curriculumData.unit)}"
+
+image_ref: "${yamlSafe(mediaData.imageRef)}"
+
 ${contextId ? `context_id: ${yamlSafe(contextId)}\n` : ""}
 
 created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"
-
-lineage:
-  root_deck_id: ${lineageValue(lineageData.rootDeckId)}
-  forked_from_deck_id: ${lineageValue(lineageData.forkedFromDeckId)}
-  forked_from_version: ${lineageValue(lineageData.forkedFromVersion)}
-  forked_from_share_id: ${lineageValue(lineageData.forkedFromShareId)}
-
-publication:
-  publication_id: ${lineageValue(publicationData.publicationId)}
-  published_at: ${lineageValue(publicationData.publishedAt)}
-
-share:
-  share_id: ${lineageValue(shareData.shareId)}
-  shared_at: ${lineageValue(shareData.sharedAt)}
 
 thoughtdeck_url: ${thoughtdeckUrl}
 

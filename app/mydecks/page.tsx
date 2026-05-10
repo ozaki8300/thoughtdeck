@@ -3,14 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  buildCurriculumPath,
+} from "@/lib/curriculum";
+import {
   groupDecksByPath,
 } from "@/lib/groupDecksByPath";
 import { encodeDeck } from "@/lib/useDeckState";
-import type {
-  DeckLineage,
-  DeckPublication,
-  DeckShare,
-} from "@/lib/buildThoughtDeckMd";
 
 type Deck = {
   deck_id: string;
@@ -19,9 +17,13 @@ type Deck = {
   title: string;
   created_at: string;
   updated_at: string;
-  lineage?: DeckLineage;
-  publication?: DeckPublication;
-  share?: DeckShare;
+  group_id?: string;
+  line_id?: string;
+  forked_from_deck_id?: string;
+  genre?: string;
+  subject?: string;
+  unit?: string;
+  image_ref?: string;
   star: number;
   trigger: string;
   keywords: string[];
@@ -206,9 +208,16 @@ function loadSavedDecks() {
       title: deck.title ?? "Untitled Deck",
       created_at: deck.created_at ?? "",
       updated_at: deck.updated_at ?? deck.created_at ?? "",
-      lineage: deck.lineage,
-      publication: deck.publication,
-      share: deck.share,
+      group_id: deck.group_id ?? "",
+      line_id: deck.line_id ?? "",
+      forked_from_deck_id:
+        deck.forked_from_deck_id ?? "",
+
+      genre: deck.genre ?? "",
+      subject: deck.subject ?? "",
+      unit: deck.unit ?? "",
+
+      image_ref: deck.image_ref ?? "",
       star: deck.star ?? 0,
       trigger: deck.trigger ?? "",
       keywords: deck.keywords ?? [],
@@ -258,45 +267,6 @@ function unquoteYaml(value: string) {
 function getYamlValue(yaml: string, key: string) {
   const match = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
   return match ? unquoteYaml(match[1]) : "";
-}
-
-function getYamlNestedValue(
-  yaml: string,
-  parent: string,
-  key: string,
-) {
-  const lines = yaml.split("\n");
-
-  let inParent = false;
-
-  for (const line of lines) {
-    // parent:
-    if (line.trim() === `${parent}:`) {
-      inParent = true;
-      continue;
-    }
-
-    // parent block終了
-    if (
-      inParent &&
-      !line.startsWith("  ") &&
-      /^[a-zA-Z0-9_-]+:/.test(line)
-    ) {
-      break;
-    }
-
-    if (!inParent) continue;
-
-    const match = line.match(
-      new RegExp(`^\\s{2}${key}:\\s*(.*)$`),
-    );
-
-    if (match) {
-      return unquoteYaml(match[1]);
-    }
-  }
-
-  return "";
 }
 
 function getYamlBlock(yaml: string, key: "raw" | "memo" | "output") {
@@ -524,65 +494,26 @@ function parseDeck(text: string): Deck | null {
     getYamlValue(yaml, "user_id");
   const contextId =
     getYamlValue(yaml, "context_id");
-  const lineage: DeckLineage = {
-    rootDeckId:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "root_deck_id",
-      ) || null,
+  const group_id =
+    getYamlValue(yaml, "group_id");
 
-    forkedFromDeckId:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "forked_from_deck_id",
-      ) || null,
+  const line_id =
+    getYamlValue(yaml, "line_id");
 
-    forkedFromVersion:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "forked_from_version",
-      ) || null,
+  const forked_from_deck_id =
+    getYamlValue(yaml, "forked_from_deck_id");
 
-    forkedFromShareId:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "forked_from_share_id",
-      ) || null,
-  };
-  const publication: DeckPublication = {
-    publicationId:
-      getYamlNestedValue(
-        yaml,
-        "publication",
-        "publication_id",
-      ) || null,
+  const genre =
+    getYamlValue(yaml, "genre");
 
-    publishedAt:
-      getYamlNestedValue(
-        yaml,
-        "publication",
-        "published_at",
-      ) || null,
-  };
-  const share: DeckShare = {
-    shareId:
-      getYamlNestedValue(
-        yaml,
-        "share",
-        "share_id",
-      ) || null,
+  const subject =
+    getYamlValue(yaml, "subject");
 
-    sharedAt:
-      getYamlNestedValue(
-        yaml,
-        "share",
-        "shared_at",
-      ) || null,
-  };
+  const unit =
+    getYamlValue(yaml, "unit");
+
+  const image_ref =
+    getYamlValue(yaml, "image_ref");
   const keywords: string[] = [];
   const links: string[] = [];
 
@@ -593,9 +524,13 @@ function parseDeck(text: string): Deck | null {
     title,
     created_at,
     updated_at,
-    lineage,
-    publication,
-    share,
+    group_id,
+    line_id,
+    forked_from_deck_id,
+    genre,
+    subject,
+    unit,
+    image_ref,
     star: 0,
     trigger: generateTrigger(raw, memo, output),
     keywords,
@@ -609,6 +544,10 @@ function parseDeck(text: string): Deck | null {
 
 function deckKey(deck: Deck) {
   return deck.deck_id || deck.title + deck.created_at;
+}
+
+function shortDeckId(value?: string) {
+  return value ? value.slice(0, 8) : "";
 }
 
 export default function MyDecksPage() {
@@ -825,13 +764,22 @@ export default function MyDecksPage() {
             currentPath
               ? `${currentPath}/${entry.name}`
               : entry.name;
+          const curriculumPath =
+            buildCurriculumPath(
+              parsed.genre,
+              parsed.subject,
+              parsed.unit,
+            );
 
           loaded.push({
             ...parsed,
-            relativePath,
+            relativePath:
+              relativePath ||
+              curriculumPath,
             contextId:
               parsed.contextId ||
-              buildContextId(relativePath),
+              buildContextId(relativePath || curriculumPath) ||
+              buildContextId(curriculumPath),
           });
           stats.thoughtDecks++;
 
@@ -948,14 +896,22 @@ export default function MyDecksPage() {
 
           const relativePath =
             file.webkitRelativePath || file.name;
+          const curriculumPath =
+            buildCurriculumPath(
+              parsed.genre,
+              parsed.subject,
+              parsed.unit,
+            );
 
           return {
             ...parsed,
             relativePath:
-              relativePath,
+              relativePath ||
+              curriculumPath,
             contextId:
               parsed.contextId ||
-              buildContextId(relativePath),
+              buildContextId(relativePath || curriculumPath) ||
+              buildContextId(curriculumPath),
           };
         }),
       )
@@ -974,16 +930,18 @@ export default function MyDecksPage() {
       addedCards: [],
       starred: [],
       deckId: deck.deck_id,
+      noteId: deck.deck_id,
+      groupId:
+        deck.group_id ||
+        deck.deck_id,
+      lineId:
+        deck.line_id ||
+        "main",
+      forkedFromDeckId:
+        deck.forked_from_deck_id ||
+        null,
       createdAt: deck.created_at,
       updatedAt: deck.updated_at,
-      publicationId:
-        deck.publication?.publicationId ?? null,
-      publishedAt:
-        deck.publication?.publishedAt ?? null,
-      shareId:
-        deck.share?.shareId ?? null,
-      sharedAt:
-        deck.share?.sharedAt ?? null,
     });
 
     const params = new URLSearchParams({
@@ -1251,54 +1209,124 @@ export default function MyDecksPage() {
                     </div>
                   )}
 
-                  {group.items.map((deck) => {
-                    const key = deckKey(deck);
+                  {group.lineages.map((lineage) => (
+                    <div
+                      key={lineage.groupId}
+                      className="rounded-xl border border-[var(--td-border)]/40 p-3"
+                    >
+                      <div className="mb-3 min-w-0">
+                        <div className="flex min-w-0 items-baseline justify-between gap-3">
+                          <h3 className="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-[var(--td-muted)] opacity-70">
+                            Lineage
+                          </h3>
+                          <span className="shrink-0 text-xs tracking-wide text-[var(--td-muted)] opacity-45">
+                            {lineage.decks.length} decks
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-45">
+                            {lineage.groupId}
+                          </span>
+                          {formatRelativeTime(lineage.latestUpdatedAt) && (
+                            <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-45">
+                              {formatRelativeTime(lineage.latestUpdatedAt)}
+                            </span>
+                          )}
+                          {lineage.originDeckId && (
+                            <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-45">
+                              Origin {shortDeckId(lineage.originDeckId)}
+                            </span>
+                          )}
+                        </div>
+                        {lineage.memoryCue && (
+                          <p className="mt-1 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
+                            {lineage.memoryCue}
+                          </p>
+                        )}
+                      </div>
 
-                    return (
-                      <article
-                        key={key}
-                        onClick={() => openDeck(deck)}
-                        className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-5 transition-[border-color,background-color,box-shadow] duration-300 ease-out hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:shadow-[0_8px_20px_rgba(15,23,42,0.22)] sm:p-4 ${
-                          highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
-                            <h2 className="min-w-0 flex-1 truncate text-sm leading-6 text-[var(--td-muted)] sm:leading-normal">
-                              {deck.title}
-                            </h2>
-                            <div className="flex shrink-0 gap-0.5">
-                              {[1, 2, 3, 4, 5].map((value) => (
-                                <button
-                                  key={value}
-                                  onClick={(event) => updateStar(event, key, value)}
-                                  className={`text-sm transition hover:text-yellow-300 ${
-                                    value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
-                                  }`}
-                                  title={`${value} stars`}
-                                >
-                                  ★
-                                </button>
-                              ))}
+                      <div className="grid gap-3">
+                        {lineage.lines.map((line) => (
+                          <div
+                            key={line.lineId}
+                            className="rounded-lg border border-[var(--td-border)]/20 p-3"
+                          >
+                            <div className="mb-3 flex min-w-0 flex-wrap items-baseline justify-between gap-2">
+                              <h4 className="min-w-0 truncate text-xs font-medium text-[var(--td-muted)] opacity-70">
+                                Line: {line.lineId || "main"}
+                              </h4>
+                              <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--td-muted)] opacity-45">
+                                <span>{line.decks.length} decks</span>
+                                {formatRelativeTime(line.latestUpdatedAt) && (
+                                  <span>{formatRelativeTime(line.latestUpdatedAt)}</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-4">
+                              {line.decks.map((deck) => {
+                                const key = deckKey(deck);
+
+                                return (
+                                  <article
+                                    key={key}
+                                    onClick={() => openDeck(deck)}
+                                    className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-5 transition-[border-color,background-color,box-shadow] duration-300 ease-out hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:shadow-[0_8px_20px_rgba(15,23,42,0.22)] sm:p-4 ${
+                                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
+                                    }`}
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--td-muted)] opacity-50">
+                                        {!deck.forked_from_deck_id ? (
+                                          <span>Origin</span>
+                                        ) : (
+                                          <span>
+                                            forked from {shortDeckId(deck.forked_from_deck_id)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
+                                        <h2 className="min-w-0 flex-1 truncate text-sm leading-6 text-[var(--td-muted)] sm:leading-normal">
+                                          {deck.title}
+                                        </h2>
+                                        <div className="flex shrink-0 gap-0.5">
+                                          {[1, 2, 3, 4, 5].map((value) => (
+                                            <button
+                                              key={value}
+                                              onClick={(event) => updateStar(event, key, value)}
+                                              className={`text-sm transition hover:text-yellow-300 ${
+                                                value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
+                                              }`}
+                                              title={`${value} stars`}
+                                            >
+                                              ★
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
+                                      <p className="mt-2 line-clamp-2 text-base font-medium leading-7 text-[var(--td-text)] sm:leading-6">
+                                        {deck.trigger ? deck.trigger : "（要約なし）"}
+                                      </p>
+                                    </div>
+
+                                    <div className="mt-4 flex justify-end">
+                                      <button
+                                        onClick={(event) => removeDeck(event, key)}
+                                        className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                                      >
+                                        削除
+                                      </button>
+                                    </div>
+                                  </article>
+                                );
+                              })}
                             </div>
                           </div>
-                          <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
-                          <p className="mt-2 line-clamp-2 text-base font-medium leading-7 text-[var(--td-text)] sm:leading-6">
-                            {deck.trigger ? deck.trigger : "（要約なし）"}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 flex justify-end">
-                          <button
-                            onClick={(event) => removeDeck(event, key)}
-                            className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))
             )}

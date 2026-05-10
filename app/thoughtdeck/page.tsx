@@ -17,6 +17,7 @@ import {
   nextThemeMode,
   themeLabel,
   decodeDeck,
+  registerLine,
   useDeckState,
 } from "../../lib/useDeckState";
 
@@ -266,6 +267,14 @@ export default function Home(props: HomeProps) {
     setQrError,
     deckId,
     setDeckId,
+    groupId,
+    setGroupId,
+    lineId,
+    setLineId,
+    availableLines,
+    switchLine,
+    forkedFromDeckId,
+    setForkedFromDeckId,
     selectedCardId,
     setSelectedCardId,
     focusMode,
@@ -386,6 +395,9 @@ export default function Home(props: HomeProps) {
       setOutput("");
       setAddedCards([]);
       setStarred([]);
+      setGroupId("");
+      setLineId("main");
+      setForkedFromDeckId("");
       // TODO: URLを状態として保持する設計のため無効化
       // window.history.replaceState({}, "", "/thoughtdeck");
       return;
@@ -402,6 +414,20 @@ export default function Home(props: HomeProps) {
           setOutput(decoded.output || "");
           setAddedCards(decoded.addedCards || []);
           setStarred(decoded.starred || []);
+          setGroupId(
+            decoded.groupId ||
+              decoded.lineage?.rootDeckId ||
+              decoded.noteId ||
+              decoded.sourceDeckId ||
+              decoded.deckId ||
+              "",
+          );
+          setLineId(decoded.lineId || "main");
+          setForkedFromDeckId(
+            decoded.forkedFromDeckId ||
+              decoded.lineage?.forkedFromDeckId ||
+              "",
+          );
           setIsRestoredFromUrl(true);
         }
 
@@ -436,6 +462,9 @@ export default function Home(props: HomeProps) {
     setOutput,
     setRaw,
     setStarred,
+    setGroupId,
+    setLineId,
+    setForkedFromDeckId,
   ]);
 
   useEffect(() => {
@@ -453,6 +482,35 @@ export default function Home(props: HomeProps) {
     setLastActivePanel("td-memo");
     setExpandedEditor("memo");
   };
+
+  function forkLine() {
+    const nextLineId =
+      window.prompt(
+        "New line name",
+        "AI-review",
+      )?.trim();
+
+    if (!nextLineId) return;
+
+    const sourceDeckId =
+      deckId ||
+      groupId ||
+      "";
+    const nextGroupId =
+      groupId ||
+      sourceDeckId;
+
+    if (!groupId && nextGroupId) {
+      setGroupId(nextGroupId);
+    }
+
+    setForkedFromDeckId(sourceDeckId);
+    registerLine(
+      nextGroupId,
+      nextLineId,
+    );
+    switchLine(nextLineId);
+  }
 
   const handleRawKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter") return;
@@ -1428,6 +1486,36 @@ export default function Home(props: HomeProps) {
             )}
 
             <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[11pt] text-[var(--td-muted)]">
+                <span>Line:</span>
+                <select
+                  value={lineId || "main"}
+                  onChange={(event) => switchLine(event.target.value)}
+                  className="min-w-24 rounded-md border border-[var(--td-border)] bg-[var(--td-panel)] px-2 py-1 text-[11pt] text-[var(--td-text)] outline-none"
+                >
+                  {Array.from(
+                    new Set([
+                      ...(availableLines.length > 0 ? availableLines : ["main"]),
+                      lineId || "main",
+                    ]),
+                  ).map((line) => (
+                    <option key={line} value={line}>
+                      {line}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {!isReadOnly && (
+                <button
+                  onClick={forkLine}
+                  className={topButtonClass}
+                  title="現在のDeckから思考lineを分岐します"
+                >
+                  Fork New Line
+                </button>
+              )}
+
               <button
                 onClick={() => router.push("/mydecks")}
                 className={topButtonClass}

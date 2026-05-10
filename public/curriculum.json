@@ -1,0 +1,225 @@
+{
+  "globis": {
+    "leadership": {
+      "label": "Leadership",
+      "basic": {
+        "OBH": {
+          "name": "組織行動とリーダーシップ",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "HRM": {
+          "name": "人材マネジメント",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        }
+      },
+      "advanced": {
+        "PWI": {
+          "name": "パワーと影響力",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "OTR": {
+          "name": "リスキリングと組織トランスフォーメーション",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day6"
+          }
+        }
+      }
+    },
+    "strategy-marketing": {
+      "label": "Strategy & Marketing",
+      "basic": {
+        "EMS": {
+          "name": "マーケティング・経営戦略基礎",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": null
+          }
+        },
+        "MKT": {
+          "name": "マーケティング",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "STR": {
+          "name": "経営戦略",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        }
+      }
+    },
+    "accounting-finance": {
+      "label": "Accounting & Finance",
+      "basic": {
+        "EA": {
+          "name": "アカウンティング基礎",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": null
+          }
+        },
+        "EF": {
+          "name": "ファイナンス基礎",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": null
+          }
+        },
+        "MAC": {
+          "name": "アカウンティングI（財務会計）",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "FIN": {
+          "name": "ファイナンスⅠ（事業戦略と企業財務）",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        }
+      },
+      "advanced": {
+        "MGA": {
+          "name": "アカウンティングII（管理会計）",
+          "credits": 1.5,
+          "required": true,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "ADF": {
+          "name": "ファイナンスII（企業価値評価と財務戦略）",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "CMF": {
+          "name": "ファイナンスⅢ（企業の合併と買収）",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        }
+      }
+    },
+    "critical-thinking": {
+      "label": "Critical Thinking",
+      "basic": {
+        "CRT": {
+          "name": "クリティカル・シンキング",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "BAN": {
+          "name": "ビジネス・アナリティクス",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        }
+      }
+    },
+    "technovate": {
+      "label": "Technovate",
+      "basic": {
+        "ET": {
+          "name": "テクノベート基礎",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": null
+          }
+        },
+        "TCT": {
+          "name": "テクノベート・シンキング",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        }
+      },
+      "advanced": {
+        "ADS": {
+          "name": "AI＆データサイエンス",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day4"
+          }
+        },
+        "TST": {
+          "name": "テクノベート・ストラテジー",
+          "credits": 1.5,
+          "timeline": {
+            "start": "Day1",
+            "end": "Day6",
+            "report_due": "Day6"
+          }
+        }
+      }
+    }
+  }
+}

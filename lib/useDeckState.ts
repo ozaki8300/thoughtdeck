@@ -1,5 +1,5 @@
 import type { ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
@@ -51,6 +51,9 @@ export type DeckState = {
   starred: string[];
   deckId?: string | null;
   noteId?: string | null;
+  groupId?: string | null;
+  lineId?: string | null;
+  forkedFromDeckId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   restoreMode?: "revision" | "fork" | "readonly";
@@ -76,8 +79,29 @@ const MYDECKS_KEY = "thoughtdeck:mydecks:v1";
 export const MAX_URL_LENGTH = 3000;
 export const QR_MAX_URL_LENGTH = 2900;
 const ENABLE_FREE_INPUT = true;
+const LINE_REGISTRY_KEY =
+  "td_line_registry";
+const LINE_STATE_KEY =
+  "td_line_state_v1";
 
 export type ResourceState = { links: { label: string; url: string }[]; templates: ResourceTemplate[] };
+type LineRegistry = Record<
+  string,
+  string[]
+>;
+type ThoughtCard = AddedCard;
+type PersistedLineState = {
+  raw: string;
+  memo: string;
+  output: string;
+  addedCards: ThoughtCard[];
+  starred: string[];
+};
+
+type LineStateMap = Record<
+  string,
+  PersistedLineState
+>;
 export const THEME_STORAGE_KEY = "thoughtdeck:theme:v2";
 export const PDF_VIEW_STORAGE_KEY = "thoughtdeck:pdf-view:v1";
 export const getPdfMaxWidth = () => {
@@ -97,6 +121,78 @@ export function decodeDeck(value: string): DeckState | null {
   } catch {
     return null;
   }
+}
+
+function loadLineRegistry(): LineRegistry {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const saved = localStorage.getItem(LINE_REGISTRY_KEY);
+    return saved ? JSON.parse(saved) as LineRegistry : {};
+  } catch {
+    localStorage.removeItem(LINE_REGISTRY_KEY);
+    return {};
+  }
+}
+
+function saveLineRegistry(
+  registry: LineRegistry,
+) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    LINE_REGISTRY_KEY,
+    JSON.stringify(registry),
+  );
+}
+
+export function registerLine(
+  groupId: string,
+  lineId: string,
+) {
+  const normalizedGroupId = groupId.trim();
+  const normalizedLineId = lineId.trim();
+
+  if (!normalizedGroupId || !normalizedLineId) return;
+
+  const registry = loadLineRegistry();
+  const lines = registry[normalizedGroupId] ?? [];
+
+  if (lines.includes(normalizedLineId)) return;
+
+  registry[normalizedGroupId] = [
+    ...lines,
+    normalizedLineId,
+  ];
+  saveLineRegistry(registry);
+}
+
+function buildLineStateKey(
+  groupId: string,
+  lineId: string,
+) {
+  return `${groupId}:${lineId}`;
+}
+
+function loadLineStateMap(): LineStateMap {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const saved = localStorage.getItem(LINE_STATE_KEY);
+    return saved ? JSON.parse(saved) as LineStateMap : {};
+  } catch {
+    localStorage.removeItem(LINE_STATE_KEY);
+    return {};
+  }
+}
+
+function saveLineStateMap(
+  map: LineStateMap,
+) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    LINE_STATE_KEY,
+    JSON.stringify(map),
+  );
 }
 
 type MyDecksLocalItem = {
@@ -465,6 +561,7 @@ export function buildRestoreUrl(
   noteId?: string | null,
   publication?: Partial<PublicationSnapshot> | null,
   share?: Partial<ShareSnapshot> | null,
+  metadata?: Pick<DeckState, "groupId" | "lineId" | "forkedFromDeckId"> | null,
 ) {
   if (typeof window === "undefined") return "";
   const base = `${window.location.origin}${window.location.pathname}`;
@@ -473,7 +570,9 @@ export function buildRestoreUrl(
   const restoreShare =
     createShareEntity(share);
   const semanticNoteId =
-    noteId ?? generatePortableId("note");
+    noteId ||
+    metadata?.groupId ||
+    generatePortableId("note");
   const deck: DeckState = {
     raw,
     memo,
@@ -483,12 +582,24 @@ export function buildRestoreUrl(
     deckId: null,
     noteId:
       semanticNoteId,
+    groupId:
+      metadata?.groupId ||
+      semanticNoteId,
+    lineId:
+      metadata?.lineId ||
+      "main",
+    forkedFromDeckId:
+      metadata?.forkedFromDeckId ||
+      null,
     restoreMode: "readonly",
     sourceDeckId:
       semanticNoteId,
     lineage: {
       rootDeckId:
         semanticNoteId,
+      forkedFromDeckId:
+        metadata?.forkedFromDeckId ||
+        null,
     },
     publicationId:
       restorePublication.publicationId,
@@ -513,6 +624,9 @@ export async function createShareSnapshot({
   deckId,
   noteId,
   publication,
+  groupId,
+  lineId,
+  forkedFromDeckId,
 }: {
   raw: string;
   memo: string;
@@ -522,6 +636,9 @@ export async function createShareSnapshot({
   deckId?: string | null;
   noteId?: string | null;
   publication?: Partial<PublicationSnapshot> | null;
+  groupId?: string | null;
+  lineId?: string | null;
+  forkedFromDeckId?: string | null;
 }) {
   // workspace runtime persistence identity
   let workspaceId = deckId;
@@ -561,22 +678,49 @@ export async function createShareSnapshot({
     publishedAt:
       publicationSnapshot.publishedAt,
   });
+  const semanticNoteId =
+    noteId ||
+    generatePortableId("note");
+  const lineageGroupId =
+    groupId ||
+    semanticNoteId;
+  const activeLineId =
+    lineId ||
+    "main";
+  const activeForkedFromDeckId =
+    forkedFromDeckId ||
+    null;
   const restoreUrl = buildRestoreUrl(
     raw,
     memo,
     output,
     addedCards,
     starred,
-    noteId ??
-      generatePortableId("note"),
+    semanticNoteId,
     publicationSnapshot,
     shareSnapshot,
+    {
+      groupId:
+        lineageGroupId,
+      lineId:
+        activeLineId,
+      forkedFromDeckId:
+        activeForkedFromDeckId,
+    },
   );
   const shortUrl = `${window.location.origin}/deck/${workspaceId}`;
   const longUrl = restoreUrl;
 
   return {
     deckId: workspaceId,
+    noteId:
+      semanticNoteId,
+    groupId:
+      lineageGroupId,
+    lineId:
+      activeLineId,
+    forkedFromDeckId:
+      activeForkedFromDeckId,
     publicationId:
       publicationSnapshot.publicationId,
     publishedAt:
@@ -722,6 +866,22 @@ export function useDeckState(props?: UseDeckStateProps) {
     draggingPdf,
     setDraggingPdf,
   } = useDeckEditor(props);
+
+  const [groupId, setGroupId] =
+    useState("");
+
+  const [lineId, setLineId] =
+    useState("main");
+
+  const [
+    forkedFromDeckId,
+    setForkedFromDeckId,
+  ] = useState("");
+
+  const [
+    availableLines,
+    setAvailableLines,
+  ] = useState<string[]>([]);
 
   const isReadOnly =
     props?.readOnly === true ||
@@ -1032,6 +1192,103 @@ export function useDeckState(props?: UseDeckStateProps) {
     setSelectedCardId(allCards[nextIndex].id);
   };
 
+  const saveCurrentLineState = useCallback(() => {
+    const activeGroupId =
+      groupId ||
+      deckId ||
+      "";
+
+    if (!activeGroupId || !lineId) return;
+
+    const map = loadLineStateMap();
+    map[buildLineStateKey(activeGroupId, lineId)] = {
+      raw,
+      memo,
+      output,
+      addedCards,
+      starred,
+    };
+    saveLineStateMap(map);
+  }, [
+    groupId,
+    deckId,
+    lineId,
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+  ]);
+
+  const loadLineState = useCallback((
+    nextLineId: string,
+  ) => {
+    const activeGroupId =
+      groupId ||
+      deckId ||
+      "";
+
+    if (!activeGroupId || !nextLineId) return;
+
+    const map = loadLineStateMap();
+    const key = buildLineStateKey(activeGroupId, nextLineId);
+    const lineState = map[key] ?? {
+      raw,
+      memo,
+      output,
+      addedCards,
+      starred,
+    };
+
+    if (!map[key]) {
+      map[key] = lineState;
+      saveLineStateMap(map);
+    }
+
+    setRaw(lineState.raw);
+    setMemo(lineState.memo);
+    setOutput(lineState.output);
+    setAddedCards(lineState.addedCards);
+    setStarred(lineState.starred);
+  }, [
+    groupId,
+    deckId,
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+    setRaw,
+    setMemo,
+    setOutput,
+    setAddedCards,
+    setStarred,
+  ]);
+
+  const switchLine = useCallback((
+    nextLineId: string,
+  ) => {
+    const normalizedLineId = nextLineId.trim();
+
+    const activeGroupId =
+      groupId ||
+      deckId ||
+      "";
+
+    if (!activeGroupId || !lineId || !normalizedLineId) return;
+    if (normalizedLineId === lineId) return;
+
+    saveCurrentLineState();
+    setLineId(normalizedLineId);
+    loadLineState(normalizedLineId);
+  }, [
+    groupId,
+    lineId,
+    saveCurrentLineState,
+    setLineId,
+    loadLineState,
+  ]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -1053,6 +1310,18 @@ export function useDeckState(props?: UseDeckStateProps) {
             setAddedCards(deck.addedCards || []);
             setStarred(deck.starred || []);
             setDeckId(deck.deckId ?? null);
+            setGroupId(
+              deck.groupId ||
+                deck.noteId ||
+                deck.deckId ||
+                "",
+            );
+            setLineId(deck.lineId || "main");
+            setForkedFromDeckId(
+              deck.forkedFromDeckId ||
+                deck.lineage?.forkedFromDeckId ||
+                "",
+            );
 
             return;
           }
@@ -1079,13 +1348,18 @@ export function useDeckState(props?: UseDeckStateProps) {
           null;
         const sourceDeckId =
           snapshot.sourceDeckId ??
+          snapshot.deckId ??
           null;
         const semanticNoteId =
           snapshot.noteId ??
           snapshot.sourceDeckId ??
+          snapshot.deckId ??
+          snapshot.groupId ??
           generatePortableId("note");
-        const forkedFromDeckId =
-          snapshot.sourceDeckId ??
+        const snapshotForkedFromDeckId =
+          snapshot.forkedFromDeckId ??
+          snapshot.lineage?.forkedFromDeckId ??
+          (restoreMode === "fork" ? sourceDeckId : null) ??
           null;
         const forkedFromShareId =
           snapshot.sourceShareId ??
@@ -1102,7 +1376,8 @@ export function useDeckState(props?: UseDeckStateProps) {
                   sourceDeckId ??
                   migratedDeckId,
 
-                forkedFromDeckId,
+                forkedFromDeckId:
+                  snapshotForkedFromDeckId,
 
                 forkedFromShareId,
               }
@@ -1111,6 +1386,17 @@ export function useDeckState(props?: UseDeckStateProps) {
                   sourceDeckId ??
                   migratedDeckId,
               };
+        const restoredGroupId =
+          snapshot.groupId ||
+          snapshot.lineage?.rootDeckId ||
+          semanticNoteId;
+        const restoredLineId =
+          snapshot.lineId ||
+          "main";
+        const restoredForkedFromDeckId =
+          snapshot.forkedFromDeckId ||
+          lineage.forkedFromDeckId ||
+          "";
 
         setRaw(snapshot.raw ?? "");
         setMemo(snapshot.memo ?? "");
@@ -1118,6 +1404,9 @@ export function useDeckState(props?: UseDeckStateProps) {
         setAddedCards(snapshot.addedCards ?? []);
         setStarred(snapshot.starred ?? []);
         setDeckId(migratedDeckId);
+        setGroupId(restoredGroupId);
+        setLineId(restoredLineId);
+        setForkedFromDeckId(restoredForkedFromDeckId);
         setShowLeft(false);
         setShowRight(false);
         localStorage.setItem(
@@ -1126,6 +1415,9 @@ export function useDeckState(props?: UseDeckStateProps) {
             ...snapshot,
             deckId: migratedDeckId,
             noteId: semanticNoteId,
+            groupId: restoredGroupId,
+            lineId: restoredLineId,
+            forkedFromDeckId: restoredForkedFromDeckId,
             restoreMode,
             sourceDeckId,
             lineage,
@@ -1149,6 +1441,18 @@ export function useDeckState(props?: UseDeckStateProps) {
         setAddedCards(deck.addedCards || []);
         setStarred(deck.starred || []);
         setDeckId(deck.deckId ?? null);
+        setGroupId(
+          deck.groupId ||
+            deck.noteId ||
+            deck.deckId ||
+            "",
+        );
+        setLineId(deck.lineId || "main");
+        setForkedFromDeckId(
+          deck.forkedFromDeckId ||
+            deck.lineage?.forkedFromDeckId ||
+            "",
+        );
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -1171,6 +1475,32 @@ export function useDeckState(props?: UseDeckStateProps) {
       localStorage.removeItem(RESOURCES_STORAGE_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    if (!groupId) {
+      setAvailableLines(["main"]);
+      return;
+    }
+
+    const registry = loadLineRegistry();
+    setAvailableLines(
+      registry[groupId] || ["main"],
+    );
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!groupId || !lineId) return;
+
+    registerLine(
+      groupId,
+      lineId,
+    );
+
+    const registry = loadLineRegistry();
+    setAvailableLines(
+      registry[groupId] || ["main"],
+    );
+  }, [groupId, lineId]);
 
   useEffect(() => {
     try {
@@ -1255,6 +1585,20 @@ export function useDeckState(props?: UseDeckStateProps) {
           noteId:
             savedSnapshot.noteId ??
             null,
+          groupId:
+            groupId ||
+            savedSnapshot.groupId ||
+            savedSnapshot.noteId ||
+            deckId ||
+            null,
+          lineId:
+            lineId ||
+            "main",
+          forkedFromDeckId:
+            forkedFromDeckId ||
+            savedSnapshot.forkedFromDeckId ||
+            savedSnapshot.lineage?.forkedFromDeckId ||
+            null,
 
           restoreMode:
             "revision",
@@ -1276,14 +1620,29 @@ export function useDeckState(props?: UseDeckStateProps) {
             null,
 
           lineage:
-            savedSnapshot.lineage ??
-            null,
+            {
+              ...(savedSnapshot.lineage ?? {}),
+              forkedFromDeckId:
+                forkedFromDeckId ||
+                savedSnapshot.lineage?.forkedFromDeckId ||
+                null,
+            },
         }),
       );
       setSaveStatus("保存済");
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [raw, memo, output, addedCards, starred, deckId]);
+  }, [
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+    deckId,
+    groupId,
+    lineId,
+    forkedFromDeckId,
+  ]);
 
   useEffect(() => {
     if (!draggingLeft) return;
@@ -1412,6 +1771,18 @@ export function useDeckState(props?: UseDeckStateProps) {
         noteId:
           savedSnapshot.noteId ??
           null,
+        groupId:
+          groupId ||
+          savedSnapshot.groupId ||
+          savedSnapshot.lineage?.rootDeckId ||
+          savedSnapshot.noteId ||
+          undefined,
+        lineId,
+        forkedFromDeckId:
+          forkedFromDeckId ||
+          savedSnapshot.forkedFromDeckId ||
+          savedSnapshot.lineage?.forkedFromDeckId ||
+          undefined,
         publication: {
           publicationId:
             publicationId ??
@@ -1423,6 +1794,12 @@ export function useDeckState(props?: UseDeckStateProps) {
       });
 
       setDeckId(result.deckId);
+      setGroupId(result.groupId);
+      setLineId(result.lineId);
+      setForkedFromDeckId(
+        result.forkedFromDeckId ??
+          "",
+      );
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
@@ -1433,6 +1810,14 @@ export function useDeckState(props?: UseDeckStateProps) {
           addedCards,
           starred,
           deckId: result.deckId,
+          noteId:
+            result.noteId,
+          groupId:
+            result.groupId,
+          lineId:
+            result.lineId,
+          forkedFromDeckId:
+            result.forkedFromDeckId,
           restoreMode: "revision",
           publicationId:
             result.publicationId,
@@ -1459,12 +1844,30 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeNoteId =
       savedSnapshot.noteId ??
       generatePortableId("note");
+    const activeGroupId =
+      groupId ||
+      savedSnapshot.groupId ||
+      savedSnapshot.lineage?.rootDeckId ||
+      activeNoteId;
+    const activeForkedFromDeckId =
+      forkedFromDeckId ||
+      savedSnapshot.forkedFromDeckId ||
+      savedSnapshot.lineage?.forkedFromDeckId ||
+      "";
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
       deckId: activeNoteId,
+      identity: {
+        groupId: activeGroupId,
+        lineId,
+      },
+      lineage: {
+        forkedFromDeckId:
+          activeForkedFromDeckId,
+      },
     });
     const timestamp = getTimestampSlug();
     const fileName = getObsidianTitle(title, timestamp);
@@ -1489,9 +1892,32 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeNoteId =
       savedSnapshot.noteId ??
       generatePortableId("note");
+    const activeGroupId =
+      groupId ||
+      savedSnapshot.groupId ||
+      savedSnapshot.lineage?.rootDeckId ||
+      activeNoteId;
+    const activeForkedFromDeckId =
+      forkedFromDeckId ||
+      savedSnapshot.forkedFromDeckId ||
+      savedSnapshot.lineage?.forkedFromDeckId ||
+      "";
 
     await navigator.clipboard.writeText(
-      buildThoughtDeckMd({ raw, memo, output, deckId: activeNoteId }),
+      buildThoughtDeckMd({
+        raw,
+        memo,
+        output,
+        deckId: activeNoteId,
+        identity: {
+          groupId: activeGroupId,
+          lineId,
+        },
+        lineage: {
+          forkedFromDeckId:
+            activeForkedFromDeckId,
+        },
+      }),
     );
     setCopyStatus("MDコピー済");
     window.setTimeout(() => setCopyStatus(""), 1800);
@@ -1504,12 +1930,30 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeNoteId =
       savedSnapshot.noteId ??
       generatePortableId("note");
+    const activeGroupId =
+      groupId ||
+      savedSnapshot.groupId ||
+      savedSnapshot.lineage?.rootDeckId ||
+      activeNoteId;
+    const activeForkedFromDeckId =
+      forkedFromDeckId ||
+      savedSnapshot.forkedFromDeckId ||
+      savedSnapshot.lineage?.forkedFromDeckId ||
+      "";
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
       deckId: activeNoteId,
+      identity: {
+        groupId: activeGroupId,
+        lineId,
+      },
+      lineage: {
+        forkedFromDeckId:
+          activeForkedFromDeckId,
+      },
     });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
@@ -1552,6 +1996,9 @@ export function useDeckState(props?: UseDeckStateProps) {
     setShowRight(false);
 
     setDeckId(null); // ← ★これが足りなかった
+    setGroupId("");
+    setLineId("main");
+    setForkedFromDeckId("");
 
     localStorage.removeItem(STORAGE_KEY);
   };
@@ -1570,6 +2017,9 @@ export function useDeckState(props?: UseDeckStateProps) {
     setFocusMode(false);
     setShowLeft(false);
     setShowRight(false);
+    setGroupId("");
+    setLineId("main");
+    setForkedFromDeckId("");
   };
 
   const confirmLoadDemo = () => {
@@ -1680,6 +2130,15 @@ export function useDeckState(props?: UseDeckStateProps) {
     setQrError,
     deckId,
     setDeckId,
+    groupId,
+    setGroupId,
+    lineId,
+    setLineId,
+    availableLines,
+    setAvailableLines,
+    switchLine,
+    forkedFromDeckId,
+    setForkedFromDeckId,
     selectedCardId,
     setSelectedCardId,
     focusMode,

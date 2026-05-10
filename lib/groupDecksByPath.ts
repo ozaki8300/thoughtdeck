@@ -1,8 +1,28 @@
 export type GroupableDeck = {
+  deck_id?: string;
+  group_id?: string;
+  line_id?: string;
+  forked_from_deck_id?: string;
   relativePath?: string;
   updated_at?: string;
   created_at?: string;
   trigger?: string;
+};
+
+export type LineGroup<T> = {
+  lineId: string;
+  latestUpdatedAt: string;
+  decks: T[];
+};
+
+export type LineageGroup<T> = {
+  groupId: string;
+  latestUpdatedAt: string;
+  memoryCue: string;
+  relationMap: Map<string, string>;
+  originDeckId: string;
+  lines: LineGroup<T>[];
+  decks: T[];
 };
 
 export type DeckGroup<T> = {
@@ -10,10 +30,11 @@ export type DeckGroup<T> = {
   latestUpdatedAt: string;
   memoryCue: string;
   deckCount: number;
-  items: T[];
+  lineages: LineageGroup<T>[];
 };
 
 const UNGROUPED_GROUP_KEY = "Ungrouped";
+const UNGROUPED_LINEAGE_KEY = "Ungrouped";
 
 function getGroupKey(relativePath?: string) {
   if (!relativePath) {
@@ -33,42 +54,133 @@ function getDeckUpdatedAt(deck: GroupableDeck) {
   return deck.updated_at || deck.created_at || "";
 }
 
+function getLineageKey(deck: GroupableDeck) {
+  return deck.group_id || deck.deck_id || UNGROUPED_LINEAGE_KEY;
+}
+
+function getLineKey(deck: GroupableDeck) {
+  return deck.line_id || "main";
+}
+
 function getTime(value: string) {
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 
+function compareLineageDecks(a: GroupableDeck, b: GroupableDeck) {
+  const aIsOrigin = !a.forked_from_deck_id;
+  const bIsOrigin = !b.forked_from_deck_id;
+
+  if (aIsOrigin !== bIsOrigin) {
+    return aIsOrigin ? -1 : 1;
+  }
+
+  return getTime(getDeckUpdatedAt(b)) - getTime(getDeckUpdatedAt(a));
+}
+
 export function groupDecksByPath<T extends GroupableDeck>(
   decks: T[],
 ): DeckGroup<T>[] {
-  const groups = new Map<string, DeckGroup<T>>();
+  const groups = new Map<string, Map<string, T[]>>();
 
   for (const deck of decks) {
     const groupKey = getGroupKey(deck.relativePath);
+    const lineageKey = getLineageKey(deck);
     const existingGroup = groups.get(groupKey);
 
     if (existingGroup) {
-      existingGroup.items.push(deck);
-      existingGroup.deckCount = existingGroup.items.length;
+      const lineage = existingGroup.get(lineageKey);
 
-      const updatedAt = getDeckUpdatedAt(deck);
-
-      if (getTime(updatedAt) > getTime(existingGroup.latestUpdatedAt)) {
-        existingGroup.latestUpdatedAt = updatedAt;
-        existingGroup.memoryCue = deck.trigger ?? "";
+      if (lineage) {
+        lineage.push(deck);
+      } else {
+        existingGroup.set(lineageKey, [deck]);
       }
 
       continue;
     }
 
-    groups.set(groupKey, {
+    groups.set(
       groupKey,
-      latestUpdatedAt: getDeckUpdatedAt(deck),
-      memoryCue: deck.trigger ?? "",
-      deckCount: 1,
-      items: [deck],
-    });
+      new Map([[lineageKey, [deck]]]),
+    );
   }
 
-  return Array.from(groups.values());
+  return Array.from(groups.entries()).map(([groupKey, lineageMap]) => {
+    const lineages = Array.from(lineageMap.entries())
+      .map(([groupId, lineageDecks]) => {
+        const sortedDecks = [...lineageDecks].sort(
+          compareLineageDecks,
+        );
+        const latestDeck = [...lineageDecks].sort(
+          (a, b) => getTime(getDeckUpdatedAt(b)) - getTime(getDeckUpdatedAt(a)),
+        )[0];
+        const relationMap = new Map<string, string>();
+        const lineMap = new Map<string, T[]>();
+
+        for (const deck of sortedDecks) {
+          if (deck.deck_id && deck.forked_from_deck_id) {
+            relationMap.set(deck.deck_id, deck.forked_from_deck_id);
+          }
+
+          const lineKey = getLineKey(deck);
+          const line = lineMap.get(lineKey);
+
+          if (line) {
+            line.push(deck);
+          } else {
+            lineMap.set(lineKey, [deck]);
+          }
+        }
+
+        const originDeck = sortedDecks.find(
+          (deck) => !deck.forked_from_deck_id,
+        );
+        const lines = Array.from(lineMap.entries())
+          .map(([lineId, lineDecks]) => {
+            const lineSortedDecks = [...lineDecks].sort(
+              compareLineageDecks,
+            );
+            const lineLatestDeck = [...lineDecks].sort(
+              (a, b) => getTime(getDeckUpdatedAt(b)) - getTime(getDeckUpdatedAt(a)),
+            )[0];
+
+            return {
+              lineId,
+              latestUpdatedAt:
+                lineLatestDeck ? getDeckUpdatedAt(lineLatestDeck) : "",
+              decks: lineSortedDecks,
+            };
+          })
+          .sort(
+            (a, b) => getTime(b.latestUpdatedAt) - getTime(a.latestUpdatedAt),
+          );
+
+        return {
+          groupId,
+          latestUpdatedAt: latestDeck ? getDeckUpdatedAt(latestDeck) : "",
+          memoryCue: latestDeck?.trigger ?? "",
+          relationMap,
+          originDeckId:
+            originDeck?.deck_id ?? "",
+          lines,
+          decks: sortedDecks,
+        };
+      })
+      .sort(
+        (a, b) => getTime(b.latestUpdatedAt) - getTime(a.latestUpdatedAt),
+      );
+    const latestLineage = lineages[0];
+
+    return {
+      groupKey,
+      latestUpdatedAt: latestLineage?.latestUpdatedAt ?? "",
+      memoryCue: latestLineage?.memoryCue ?? "",
+      deckCount: lineages.reduce(
+        (count, lineage) => count + lineage.decks.length,
+        0,
+      ),
+      lineages,
+    };
+  });
 }

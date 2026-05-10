@@ -289,14 +289,12 @@ FILE: app/mydecks/page.tsx
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  buildCurriculumPath,
+} from "@/lib/curriculum";
+import {
   groupDecksByPath,
 } from "@/lib/groupDecksByPath";
 import { encodeDeck } from "@/lib/useDeckState";
-import type {
-  DeckLineage,
-  DeckPublication,
-  DeckShare,
-} from "@/lib/buildThoughtDeckMd";
 
 type Deck = {
   deck_id: string;
@@ -305,9 +303,13 @@ type Deck = {
   title: string;
   created_at: string;
   updated_at: string;
-  lineage?: DeckLineage;
-  publication?: DeckPublication;
-  share?: DeckShare;
+  group_id?: string;
+  line_id?: string;
+  forked_from_deck_id?: string;
+  genre?: string;
+  subject?: string;
+  unit?: string;
+  image_ref?: string;
   star: number;
   trigger: string;
   keywords: string[];
@@ -492,9 +494,16 @@ function loadSavedDecks() {
       title: deck.title ?? "Untitled Deck",
       created_at: deck.created_at ?? "",
       updated_at: deck.updated_at ?? deck.created_at ?? "",
-      lineage: deck.lineage,
-      publication: deck.publication,
-      share: deck.share,
+      group_id: deck.group_id ?? "",
+      line_id: deck.line_id ?? "",
+      forked_from_deck_id:
+        deck.forked_from_deck_id ?? "",
+
+      genre: deck.genre ?? "",
+      subject: deck.subject ?? "",
+      unit: deck.unit ?? "",
+
+      image_ref: deck.image_ref ?? "",
       star: deck.star ?? 0,
       trigger: deck.trigger ?? "",
       keywords: deck.keywords ?? [],
@@ -544,45 +553,6 @@ function unquoteYaml(value: string) {
 function getYamlValue(yaml: string, key: string) {
   const match = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
   return match ? unquoteYaml(match[1]) : "";
-}
-
-function getYamlNestedValue(
-  yaml: string,
-  parent: string,
-  key: string,
-) {
-  const lines = yaml.split("\n");
-
-  let inParent = false;
-
-  for (const line of lines) {
-    // parent:
-    if (line.trim() === `${parent}:`) {
-      inParent = true;
-      continue;
-    }
-
-    // parent block終了
-    if (
-      inParent &&
-      !line.startsWith("  ") &&
-      /^[a-zA-Z0-9_-]+:/.test(line)
-    ) {
-      break;
-    }
-
-    if (!inParent) continue;
-
-    const match = line.match(
-      new RegExp(`^\\s{2}${key}:\\s*(.*)$`),
-    );
-
-    if (match) {
-      return unquoteYaml(match[1]);
-    }
-  }
-
-  return "";
 }
 
 function getYamlBlock(yaml: string, key: "raw" | "memo" | "output") {
@@ -810,65 +780,26 @@ function parseDeck(text: string): Deck | null {
     getYamlValue(yaml, "user_id");
   const contextId =
     getYamlValue(yaml, "context_id");
-  const lineage: DeckLineage = {
-    rootDeckId:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "root_deck_id",
-      ) || null,
+  const group_id =
+    getYamlValue(yaml, "group_id");
 
-    forkedFromDeckId:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "forked_from_deck_id",
-      ) || null,
+  const line_id =
+    getYamlValue(yaml, "line_id");
 
-    forkedFromVersion:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "forked_from_version",
-      ) || null,
+  const forked_from_deck_id =
+    getYamlValue(yaml, "forked_from_deck_id");
 
-    forkedFromShareId:
-      getYamlNestedValue(
-        yaml,
-        "lineage",
-        "forked_from_share_id",
-      ) || null,
-  };
-  const publication: DeckPublication = {
-    publicationId:
-      getYamlNestedValue(
-        yaml,
-        "publication",
-        "publication_id",
-      ) || null,
+  const genre =
+    getYamlValue(yaml, "genre");
 
-    publishedAt:
-      getYamlNestedValue(
-        yaml,
-        "publication",
-        "published_at",
-      ) || null,
-  };
-  const share: DeckShare = {
-    shareId:
-      getYamlNestedValue(
-        yaml,
-        "share",
-        "share_id",
-      ) || null,
+  const subject =
+    getYamlValue(yaml, "subject");
 
-    sharedAt:
-      getYamlNestedValue(
-        yaml,
-        "share",
-        "shared_at",
-      ) || null,
-  };
+  const unit =
+    getYamlValue(yaml, "unit");
+
+  const image_ref =
+    getYamlValue(yaml, "image_ref");
   const keywords: string[] = [];
   const links: string[] = [];
 
@@ -879,9 +810,13 @@ function parseDeck(text: string): Deck | null {
     title,
     created_at,
     updated_at,
-    lineage,
-    publication,
-    share,
+    group_id,
+    line_id,
+    forked_from_deck_id,
+    genre,
+    subject,
+    unit,
+    image_ref,
     star: 0,
     trigger: generateTrigger(raw, memo, output),
     keywords,
@@ -895,6 +830,10 @@ function parseDeck(text: string): Deck | null {
 
 function deckKey(deck: Deck) {
   return deck.deck_id || deck.title + deck.created_at;
+}
+
+function shortDeckId(value?: string) {
+  return value ? value.slice(0, 8) : "";
 }
 
 export default function MyDecksPage() {
@@ -1111,13 +1050,22 @@ export default function MyDecksPage() {
             currentPath
               ? `${currentPath}/${entry.name}`
               : entry.name;
+          const curriculumPath =
+            buildCurriculumPath(
+              parsed.genre,
+              parsed.subject,
+              parsed.unit,
+            );
 
           loaded.push({
             ...parsed,
-            relativePath,
+            relativePath:
+              relativePath ||
+              curriculumPath,
             contextId:
               parsed.contextId ||
-              buildContextId(relativePath),
+              buildContextId(relativePath || curriculumPath) ||
+              buildContextId(curriculumPath),
           });
           stats.thoughtDecks++;
 
@@ -1234,14 +1182,22 @@ export default function MyDecksPage() {
 
           const relativePath =
             file.webkitRelativePath || file.name;
+          const curriculumPath =
+            buildCurriculumPath(
+              parsed.genre,
+              parsed.subject,
+              parsed.unit,
+            );
 
           return {
             ...parsed,
             relativePath:
-              relativePath,
+              relativePath ||
+              curriculumPath,
             contextId:
               parsed.contextId ||
-              buildContextId(relativePath),
+              buildContextId(relativePath || curriculumPath) ||
+              buildContextId(curriculumPath),
           };
         }),
       )
@@ -1260,16 +1216,18 @@ export default function MyDecksPage() {
       addedCards: [],
       starred: [],
       deckId: deck.deck_id,
+      noteId: deck.deck_id,
+      groupId:
+        deck.group_id ||
+        deck.deck_id,
+      lineId:
+        deck.line_id ||
+        "main",
+      forkedFromDeckId:
+        deck.forked_from_deck_id ||
+        null,
       createdAt: deck.created_at,
       updatedAt: deck.updated_at,
-      publicationId:
-        deck.publication?.publicationId ?? null,
-      publishedAt:
-        deck.publication?.publishedAt ?? null,
-      shareId:
-        deck.share?.shareId ?? null,
-      sharedAt:
-        deck.share?.sharedAt ?? null,
     });
 
     const params = new URLSearchParams({
@@ -1537,54 +1495,124 @@ export default function MyDecksPage() {
                     </div>
                   )}
 
-                  {group.items.map((deck) => {
-                    const key = deckKey(deck);
+                  {group.lineages.map((lineage) => (
+                    <div
+                      key={lineage.groupId}
+                      className="rounded-xl border border-[var(--td-border)]/40 p-3"
+                    >
+                      <div className="mb-3 min-w-0">
+                        <div className="flex min-w-0 items-baseline justify-between gap-3">
+                          <h3 className="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-[var(--td-muted)] opacity-70">
+                            Lineage
+                          </h3>
+                          <span className="shrink-0 text-xs tracking-wide text-[var(--td-muted)] opacity-45">
+                            {lineage.decks.length} decks
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-45">
+                            {lineage.groupId}
+                          </span>
+                          {formatRelativeTime(lineage.latestUpdatedAt) && (
+                            <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-45">
+                              {formatRelativeTime(lineage.latestUpdatedAt)}
+                            </span>
+                          )}
+                          {lineage.originDeckId && (
+                            <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-45">
+                              Origin {shortDeckId(lineage.originDeckId)}
+                            </span>
+                          )}
+                        </div>
+                        {lineage.memoryCue && (
+                          <p className="mt-1 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
+                            {lineage.memoryCue}
+                          </p>
+                        )}
+                      </div>
 
-                    return (
-                      <article
-                        key={key}
-                        onClick={() => openDeck(deck)}
-                        className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-5 transition-[border-color,background-color,box-shadow] duration-300 ease-out hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:shadow-[0_8px_20px_rgba(15,23,42,0.22)] sm:p-4 ${
-                          highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
-                            <h2 className="min-w-0 flex-1 truncate text-sm leading-6 text-[var(--td-muted)] sm:leading-normal">
-                              {deck.title}
-                            </h2>
-                            <div className="flex shrink-0 gap-0.5">
-                              {[1, 2, 3, 4, 5].map((value) => (
-                                <button
-                                  key={value}
-                                  onClick={(event) => updateStar(event, key, value)}
-                                  className={`text-sm transition hover:text-yellow-300 ${
-                                    value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
-                                  }`}
-                                  title={`${value} stars`}
-                                >
-                                  ★
-                                </button>
-                              ))}
+                      <div className="grid gap-3">
+                        {lineage.lines.map((line) => (
+                          <div
+                            key={line.lineId}
+                            className="rounded-lg border border-[var(--td-border)]/20 p-3"
+                          >
+                            <div className="mb-3 flex min-w-0 flex-wrap items-baseline justify-between gap-2">
+                              <h4 className="min-w-0 truncate text-xs font-medium text-[var(--td-muted)] opacity-70">
+                                Line: {line.lineId || "main"}
+                              </h4>
+                              <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--td-muted)] opacity-45">
+                                <span>{line.decks.length} decks</span>
+                                {formatRelativeTime(line.latestUpdatedAt) && (
+                                  <span>{formatRelativeTime(line.latestUpdatedAt)}</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-4">
+                              {line.decks.map((deck) => {
+                                const key = deckKey(deck);
+
+                                return (
+                                  <article
+                                    key={key}
+                                    onClick={() => openDeck(deck)}
+                                    className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-5 transition-[border-color,background-color,box-shadow] duration-300 ease-out hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:shadow-[0_8px_20px_rgba(15,23,42,0.22)] sm:p-4 ${
+                                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
+                                    }`}
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--td-muted)] opacity-50">
+                                        {!deck.forked_from_deck_id ? (
+                                          <span>Origin</span>
+                                        ) : (
+                                          <span>
+                                            forked from {shortDeckId(deck.forked_from_deck_id)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
+                                        <h2 className="min-w-0 flex-1 truncate text-sm leading-6 text-[var(--td-muted)] sm:leading-normal">
+                                          {deck.title}
+                                        </h2>
+                                        <div className="flex shrink-0 gap-0.5">
+                                          {[1, 2, 3, 4, 5].map((value) => (
+                                            <button
+                                              key={value}
+                                              onClick={(event) => updateStar(event, key, value)}
+                                              className={`text-sm transition hover:text-yellow-300 ${
+                                                value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
+                                              }`}
+                                              title={`${value} stars`}
+                                            >
+                                              ★
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
+                                      <p className="mt-2 line-clamp-2 text-base font-medium leading-7 text-[var(--td-text)] sm:leading-6">
+                                        {deck.trigger ? deck.trigger : "（要約なし）"}
+                                      </p>
+                                    </div>
+
+                                    <div className="mt-4 flex justify-end">
+                                      <button
+                                        onClick={(event) => removeDeck(event, key)}
+                                        className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+                                      >
+                                        削除
+                                      </button>
+                                    </div>
+                                  </article>
+                                );
+                              })}
                             </div>
                           </div>
-                          <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
-                          <p className="mt-2 line-clamp-2 text-base font-medium leading-7 text-[var(--td-text)] sm:leading-6">
-                            {deck.trigger ? deck.trigger : "（要約なし）"}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 flex justify-end">
-                          <button
-                            onClick={(event) => removeDeck(event, key)}
-                            className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))
             )}
@@ -1711,6 +1739,7 @@ import {
   nextThemeMode,
   themeLabel,
   decodeDeck,
+  registerLine,
   useDeckState,
 } from "../../lib/useDeckState";
 
@@ -1960,6 +1989,14 @@ export default function Home(props: HomeProps) {
     setQrError,
     deckId,
     setDeckId,
+    groupId,
+    setGroupId,
+    lineId,
+    setLineId,
+    availableLines,
+    switchLine,
+    forkedFromDeckId,
+    setForkedFromDeckId,
     selectedCardId,
     setSelectedCardId,
     focusMode,
@@ -2080,6 +2117,9 @@ export default function Home(props: HomeProps) {
       setOutput("");
       setAddedCards([]);
       setStarred([]);
+      setGroupId("");
+      setLineId("main");
+      setForkedFromDeckId("");
       // TODO: URLを状態として保持する設計のため無効化
       // window.history.replaceState({}, "", "/thoughtdeck");
       return;
@@ -2096,6 +2136,20 @@ export default function Home(props: HomeProps) {
           setOutput(decoded.output || "");
           setAddedCards(decoded.addedCards || []);
           setStarred(decoded.starred || []);
+          setGroupId(
+            decoded.groupId ||
+              decoded.lineage?.rootDeckId ||
+              decoded.noteId ||
+              decoded.sourceDeckId ||
+              decoded.deckId ||
+              "",
+          );
+          setLineId(decoded.lineId || "main");
+          setForkedFromDeckId(
+            decoded.forkedFromDeckId ||
+              decoded.lineage?.forkedFromDeckId ||
+              "",
+          );
           setIsRestoredFromUrl(true);
         }
 
@@ -2130,6 +2184,9 @@ export default function Home(props: HomeProps) {
     setOutput,
     setRaw,
     setStarred,
+    setGroupId,
+    setLineId,
+    setForkedFromDeckId,
   ]);
 
   useEffect(() => {
@@ -2147,6 +2204,35 @@ export default function Home(props: HomeProps) {
     setLastActivePanel("td-memo");
     setExpandedEditor("memo");
   };
+
+  function forkLine() {
+    const nextLineId =
+      window.prompt(
+        "New line name",
+        "AI-review",
+      )?.trim();
+
+    if (!nextLineId) return;
+
+    const sourceDeckId =
+      deckId ||
+      groupId ||
+      "";
+    const nextGroupId =
+      groupId ||
+      sourceDeckId;
+
+    if (!groupId && nextGroupId) {
+      setGroupId(nextGroupId);
+    }
+
+    setForkedFromDeckId(sourceDeckId);
+    registerLine(
+      nextGroupId,
+      nextLineId,
+    );
+    switchLine(nextLineId);
+  }
 
   const handleRawKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter") return;
@@ -3122,6 +3208,36 @@ export default function Home(props: HomeProps) {
             )}
 
             <div ref={topMenuRef} data-td-menu-root className="flex items-center gap-2 rounded-xl border border-[var(--td-border)] bg-[var(--td-surface)] p-1">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--td-border)] px-3 py-1.5 text-[11pt] text-[var(--td-muted)]">
+                <span>Line:</span>
+                <select
+                  value={lineId || "main"}
+                  onChange={(event) => switchLine(event.target.value)}
+                  className="min-w-24 rounded-md border border-[var(--td-border)] bg-[var(--td-panel)] px-2 py-1 text-[11pt] text-[var(--td-text)] outline-none"
+                >
+                  {Array.from(
+                    new Set([
+                      ...(availableLines.length > 0 ? availableLines : ["main"]),
+                      lineId || "main",
+                    ]),
+                  ).map((line) => (
+                    <option key={line} value={line}>
+                      {line}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {!isReadOnly && (
+                <button
+                  onClick={forkLine}
+                  className={topButtonClass}
+                  title="現在のDeckから思考lineを分岐します"
+                >
+                  Fork New Line
+                </button>
+              )}
+
               <button
                 onClick={() => router.push("/mydecks")}
                 className={topButtonClass}
@@ -3680,6 +3796,21 @@ FILE: lib/buildThoughtDeckMd.ts
 
 import { buildRestoreUrl } from "./useDeckState";
 
+export type DeckCurriculum = {
+  genre?: string | null;
+  subject?: string | null;
+  unit?: string | null;
+};
+
+export type DeckIdentity = {
+  groupId?: string | null;
+  lineId?: string | null;
+};
+
+export type DeckMedia = {
+  imageRef?: string | null;
+};
+
 export type DeckLineage = {
   rootDeckId?: string | null;
   forkedFromDeckId?: string | null;
@@ -3687,25 +3818,19 @@ export type DeckLineage = {
   forkedFromShareId?: string | null;
 };
 
-export type DeckPublication = {
-  publicationId?: string | null;
-  publishedAt?: string | null;
-};
-
-export type DeckShare = {
-  shareId?: string | null;
-  sharedAt?: string | null;
-};
-
 type BuildThoughtDeckMdArgs = {
   raw: string;
   memo: string;
   output: string;
+
   deckId: string | null;
   contextId?: string | null;
+
   lineage?: DeckLineage;
-  publication?: DeckPublication;
-  share?: DeckShare;
+
+  curriculum?: DeckCurriculum;
+  identity?: DeckIdentity;
+  media?: DeckMedia;
 };
 
 const CREATED_AT_STORAGE_KEY = "thoughtdeck:created-at:v1";
@@ -3809,51 +3934,52 @@ export function buildThoughtDeckMd({
   raw,
   memo,
   output,
+
   deckId,
   contextId,
+
   lineage,
-  publication,
-  share,
+
+  curriculum,
+  identity,
+  media,
 }: BuildThoughtDeckMdArgs) {
   const userId = getUserId();
   // deck_id is semantic note continuity here, not Supabase persistence identity.
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
   const createdAt = getCreatedAt(deckIdFinal, now);
-  const lineageData = {
-    rootDeckId:
-      lineage?.rootDeckId ??
-      deckIdFinal,
+  const groupId =
+    identity?.groupId ||
+    deckIdFinal;
 
+  const lineId =
+    identity?.lineId ||
+    "main";
+
+  const curriculumData = {
+    genre:
+      curriculum?.genre ??
+      "",
+
+    subject:
+      curriculum?.subject ??
+      "",
+
+    unit:
+      curriculum?.unit ??
+      "",
+  };
+
+  const mediaData = {
+    imageRef:
+      media?.imageRef ??
+      "",
+  };
+
+  const lineageData = {
     forkedFromDeckId:
       lineage?.forkedFromDeckId ??
-      null,
-
-    forkedFromVersion:
-      lineage?.forkedFromVersion ??
-      null,
-
-    forkedFromShareId:
-      lineage?.forkedFromShareId ??
-      share?.shareId ??
-      null,
-  };
-  const publicationData = {
-    publicationId:
-      publication?.publicationId ??
-      null,
-
-    publishedAt:
-      publication?.publishedAt ??
-      null,
-  };
-  const shareData = {
-    shareId:
-      share?.shareId ??
-      null,
-
-    sharedAt:
-      share?.sharedAt ??
       null,
   };
   const thoughtdeckUrl = buildRestoreUrl(
@@ -3863,50 +3989,37 @@ export function buildThoughtDeckMd({
     [],
     [],
     deckIdFinal,
+    null,
+    null,
     {
-      publicationId:
-        publicationData.publicationId ??
-        undefined,
-
-      publishedAt:
-        publicationData.publishedAt ??
-        undefined,
-    },
-    {
-      shareId:
-        shareData.shareId ??
-        undefined,
-
-      sharedAt:
-        shareData.sharedAt ??
-        undefined,
+      groupId,
+      lineId,
+      forkedFromDeckId:
+        lineageData.forkedFromDeckId,
     },
   );
 
   return `---
 format: thoughtdeck
-version: 1
+version: 2
 
 user_id: ${userId}
 deck_id: ${deckIdFinal}
+
+group_id: ${yamlSafe(groupId)}
+line_id: ${yamlSafe(lineId)}
+forked_from_deck_id: ${lineageValue(lineageData.forkedFromDeckId)}
+
+genre: "${yamlSafe(curriculumData.genre)}"
+subject: "${yamlSafe(curriculumData.subject)}"
+unit: "${yamlSafe(curriculumData.unit)}"
+
+image_ref: "${yamlSafe(mediaData.imageRef)}"
+
 ${contextId ? `context_id: ${yamlSafe(contextId)}\n` : ""}
 
 created_at: "${yamlSafe(createdAt)}"
 updated_at: "${yamlSafe(now)}"
-
-lineage:
-  root_deck_id: ${lineageValue(lineageData.rootDeckId)}
-  forked_from_deck_id: ${lineageValue(lineageData.forkedFromDeckId)}
-  forked_from_version: ${lineageValue(lineageData.forkedFromVersion)}
-  forked_from_share_id: ${lineageValue(lineageData.forkedFromShareId)}
-
-publication:
-  publication_id: ${lineageValue(publicationData.publicationId)}
-  published_at: ${lineageValue(publicationData.publishedAt)}
-
-share:
-  share_id: ${lineageValue(shareData.shareId)}
-  shared_at: ${lineageValue(shareData.sharedAt)}
 
 thoughtdeck_url: ${thoughtdeckUrl}
 
@@ -3938,6 +4051,40 @@ ${visible(output)}
 
 ---
 `;
+}
+
+
+====================
+FILE: lib/curriculum.ts
+====================
+
+export type CurriculumUniverse = Record<
+  string,
+  Record<string, string[]>
+>;
+
+export async function loadCurriculum(): Promise<CurriculumUniverse> {
+  const response = await fetch("/curriculum.json");
+
+  if (!response.ok) {
+    throw new Error("Failed to load curriculum.json");
+  }
+
+  return response.json();
+}
+
+export function buildCurriculumPath(
+  genre?: string,
+  subject?: string,
+  unit?: string,
+) {
+  return [
+    genre,
+    subject,
+    unit,
+  ]
+    .filter(Boolean)
+    .join("/");
 }
 
 
@@ -4138,10 +4285,30 @@ FILE: lib/groupDecksByPath.ts
 ====================
 
 export type GroupableDeck = {
+  deck_id?: string;
+  group_id?: string;
+  line_id?: string;
+  forked_from_deck_id?: string;
   relativePath?: string;
   updated_at?: string;
   created_at?: string;
   trigger?: string;
+};
+
+export type LineGroup<T> = {
+  lineId: string;
+  latestUpdatedAt: string;
+  decks: T[];
+};
+
+export type LineageGroup<T> = {
+  groupId: string;
+  latestUpdatedAt: string;
+  memoryCue: string;
+  relationMap: Map<string, string>;
+  originDeckId: string;
+  lines: LineGroup<T>[];
+  decks: T[];
 };
 
 export type DeckGroup<T> = {
@@ -4149,10 +4316,11 @@ export type DeckGroup<T> = {
   latestUpdatedAt: string;
   memoryCue: string;
   deckCount: number;
-  items: T[];
+  lineages: LineageGroup<T>[];
 };
 
 const UNGROUPED_GROUP_KEY = "Ungrouped";
+const UNGROUPED_LINEAGE_KEY = "Ungrouped";
 
 function getGroupKey(relativePath?: string) {
   if (!relativePath) {
@@ -4172,44 +4340,135 @@ function getDeckUpdatedAt(deck: GroupableDeck) {
   return deck.updated_at || deck.created_at || "";
 }
 
+function getLineageKey(deck: GroupableDeck) {
+  return deck.group_id || deck.deck_id || UNGROUPED_LINEAGE_KEY;
+}
+
+function getLineKey(deck: GroupableDeck) {
+  return deck.line_id || "main";
+}
+
 function getTime(value: string) {
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 
+function compareLineageDecks(a: GroupableDeck, b: GroupableDeck) {
+  const aIsOrigin = !a.forked_from_deck_id;
+  const bIsOrigin = !b.forked_from_deck_id;
+
+  if (aIsOrigin !== bIsOrigin) {
+    return aIsOrigin ? -1 : 1;
+  }
+
+  return getTime(getDeckUpdatedAt(b)) - getTime(getDeckUpdatedAt(a));
+}
+
 export function groupDecksByPath<T extends GroupableDeck>(
   decks: T[],
 ): DeckGroup<T>[] {
-  const groups = new Map<string, DeckGroup<T>>();
+  const groups = new Map<string, Map<string, T[]>>();
 
   for (const deck of decks) {
     const groupKey = getGroupKey(deck.relativePath);
+    const lineageKey = getLineageKey(deck);
     const existingGroup = groups.get(groupKey);
 
     if (existingGroup) {
-      existingGroup.items.push(deck);
-      existingGroup.deckCount = existingGroup.items.length;
+      const lineage = existingGroup.get(lineageKey);
 
-      const updatedAt = getDeckUpdatedAt(deck);
-
-      if (getTime(updatedAt) > getTime(existingGroup.latestUpdatedAt)) {
-        existingGroup.latestUpdatedAt = updatedAt;
-        existingGroup.memoryCue = deck.trigger ?? "";
+      if (lineage) {
+        lineage.push(deck);
+      } else {
+        existingGroup.set(lineageKey, [deck]);
       }
 
       continue;
     }
 
-    groups.set(groupKey, {
+    groups.set(
       groupKey,
-      latestUpdatedAt: getDeckUpdatedAt(deck),
-      memoryCue: deck.trigger ?? "",
-      deckCount: 1,
-      items: [deck],
-    });
+      new Map([[lineageKey, [deck]]]),
+    );
   }
 
-  return Array.from(groups.values());
+  return Array.from(groups.entries()).map(([groupKey, lineageMap]) => {
+    const lineages = Array.from(lineageMap.entries())
+      .map(([groupId, lineageDecks]) => {
+        const sortedDecks = [...lineageDecks].sort(
+          compareLineageDecks,
+        );
+        const latestDeck = [...lineageDecks].sort(
+          (a, b) => getTime(getDeckUpdatedAt(b)) - getTime(getDeckUpdatedAt(a)),
+        )[0];
+        const relationMap = new Map<string, string>();
+        const lineMap = new Map<string, T[]>();
+
+        for (const deck of sortedDecks) {
+          if (deck.deck_id && deck.forked_from_deck_id) {
+            relationMap.set(deck.deck_id, deck.forked_from_deck_id);
+          }
+
+          const lineKey = getLineKey(deck);
+          const line = lineMap.get(lineKey);
+
+          if (line) {
+            line.push(deck);
+          } else {
+            lineMap.set(lineKey, [deck]);
+          }
+        }
+
+        const originDeck = sortedDecks.find(
+          (deck) => !deck.forked_from_deck_id,
+        );
+        const lines = Array.from(lineMap.entries())
+          .map(([lineId, lineDecks]) => {
+            const lineSortedDecks = [...lineDecks].sort(
+              compareLineageDecks,
+            );
+            const lineLatestDeck = [...lineDecks].sort(
+              (a, b) => getTime(getDeckUpdatedAt(b)) - getTime(getDeckUpdatedAt(a)),
+            )[0];
+
+            return {
+              lineId,
+              latestUpdatedAt:
+                lineLatestDeck ? getDeckUpdatedAt(lineLatestDeck) : "",
+              decks: lineSortedDecks,
+            };
+          })
+          .sort(
+            (a, b) => getTime(b.latestUpdatedAt) - getTime(a.latestUpdatedAt),
+          );
+
+        return {
+          groupId,
+          latestUpdatedAt: latestDeck ? getDeckUpdatedAt(latestDeck) : "",
+          memoryCue: latestDeck?.trigger ?? "",
+          relationMap,
+          originDeckId:
+            originDeck?.deck_id ?? "",
+          lines,
+          decks: sortedDecks,
+        };
+      })
+      .sort(
+        (a, b) => getTime(b.latestUpdatedAt) - getTime(a.latestUpdatedAt),
+      );
+    const latestLineage = lineages[0];
+
+    return {
+      groupKey,
+      latestUpdatedAt: latestLineage?.latestUpdatedAt ?? "",
+      memoryCue: latestLineage?.memoryCue ?? "",
+      deckCount: lineages.reduce(
+        (count, lineage) => count + lineage.decks.length,
+        0,
+      ),
+      lineages,
+    };
+  });
 }
 
 
@@ -5015,7 +5274,7 @@ FILE: lib/useDeckState.ts
 ====================
 
 import type { ChangeEvent as ReactChangeEvent, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
@@ -5067,6 +5326,9 @@ export type DeckState = {
   starred: string[];
   deckId?: string | null;
   noteId?: string | null;
+  groupId?: string | null;
+  lineId?: string | null;
+  forkedFromDeckId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   restoreMode?: "revision" | "fork" | "readonly";
@@ -5092,8 +5354,29 @@ const MYDECKS_KEY = "thoughtdeck:mydecks:v1";
 export const MAX_URL_LENGTH = 3000;
 export const QR_MAX_URL_LENGTH = 2900;
 const ENABLE_FREE_INPUT = true;
+const LINE_REGISTRY_KEY =
+  "td_line_registry";
+const LINE_STATE_KEY =
+  "td_line_state_v1";
 
 export type ResourceState = { links: { label: string; url: string }[]; templates: ResourceTemplate[] };
+type LineRegistry = Record<
+  string,
+  string[]
+>;
+type ThoughtCard = AddedCard;
+type PersistedLineState = {
+  raw: string;
+  memo: string;
+  output: string;
+  addedCards: ThoughtCard[];
+  starred: string[];
+};
+
+type LineStateMap = Record<
+  string,
+  PersistedLineState
+>;
 export const THEME_STORAGE_KEY = "thoughtdeck:theme:v2";
 export const PDF_VIEW_STORAGE_KEY = "thoughtdeck:pdf-view:v1";
 export const getPdfMaxWidth = () => {
@@ -5113,6 +5396,78 @@ export function decodeDeck(value: string): DeckState | null {
   } catch {
     return null;
   }
+}
+
+function loadLineRegistry(): LineRegistry {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const saved = localStorage.getItem(LINE_REGISTRY_KEY);
+    return saved ? JSON.parse(saved) as LineRegistry : {};
+  } catch {
+    localStorage.removeItem(LINE_REGISTRY_KEY);
+    return {};
+  }
+}
+
+function saveLineRegistry(
+  registry: LineRegistry,
+) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    LINE_REGISTRY_KEY,
+    JSON.stringify(registry),
+  );
+}
+
+export function registerLine(
+  groupId: string,
+  lineId: string,
+) {
+  const normalizedGroupId = groupId.trim();
+  const normalizedLineId = lineId.trim();
+
+  if (!normalizedGroupId || !normalizedLineId) return;
+
+  const registry = loadLineRegistry();
+  const lines = registry[normalizedGroupId] ?? [];
+
+  if (lines.includes(normalizedLineId)) return;
+
+  registry[normalizedGroupId] = [
+    ...lines,
+    normalizedLineId,
+  ];
+  saveLineRegistry(registry);
+}
+
+function buildLineStateKey(
+  groupId: string,
+  lineId: string,
+) {
+  return `${groupId}:${lineId}`;
+}
+
+function loadLineStateMap(): LineStateMap {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const saved = localStorage.getItem(LINE_STATE_KEY);
+    return saved ? JSON.parse(saved) as LineStateMap : {};
+  } catch {
+    localStorage.removeItem(LINE_STATE_KEY);
+    return {};
+  }
+}
+
+function saveLineStateMap(
+  map: LineStateMap,
+) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    LINE_STATE_KEY,
+    JSON.stringify(map),
+  );
 }
 
 type MyDecksLocalItem = {
@@ -5481,6 +5836,7 @@ export function buildRestoreUrl(
   noteId?: string | null,
   publication?: Partial<PublicationSnapshot> | null,
   share?: Partial<ShareSnapshot> | null,
+  metadata?: Pick<DeckState, "groupId" | "lineId" | "forkedFromDeckId"> | null,
 ) {
   if (typeof window === "undefined") return "";
   const base = `${window.location.origin}${window.location.pathname}`;
@@ -5489,7 +5845,9 @@ export function buildRestoreUrl(
   const restoreShare =
     createShareEntity(share);
   const semanticNoteId =
-    noteId ?? generatePortableId("note");
+    noteId ||
+    metadata?.groupId ||
+    generatePortableId("note");
   const deck: DeckState = {
     raw,
     memo,
@@ -5499,12 +5857,24 @@ export function buildRestoreUrl(
     deckId: null,
     noteId:
       semanticNoteId,
+    groupId:
+      metadata?.groupId ||
+      semanticNoteId,
+    lineId:
+      metadata?.lineId ||
+      "main",
+    forkedFromDeckId:
+      metadata?.forkedFromDeckId ||
+      null,
     restoreMode: "readonly",
     sourceDeckId:
       semanticNoteId,
     lineage: {
       rootDeckId:
         semanticNoteId,
+      forkedFromDeckId:
+        metadata?.forkedFromDeckId ||
+        null,
     },
     publicationId:
       restorePublication.publicationId,
@@ -5529,6 +5899,9 @@ export async function createShareSnapshot({
   deckId,
   noteId,
   publication,
+  groupId,
+  lineId,
+  forkedFromDeckId,
 }: {
   raw: string;
   memo: string;
@@ -5538,6 +5911,9 @@ export async function createShareSnapshot({
   deckId?: string | null;
   noteId?: string | null;
   publication?: Partial<PublicationSnapshot> | null;
+  groupId?: string | null;
+  lineId?: string | null;
+  forkedFromDeckId?: string | null;
 }) {
   // workspace runtime persistence identity
   let workspaceId = deckId;
@@ -5577,22 +5953,49 @@ export async function createShareSnapshot({
     publishedAt:
       publicationSnapshot.publishedAt,
   });
+  const semanticNoteId =
+    noteId ||
+    generatePortableId("note");
+  const lineageGroupId =
+    groupId ||
+    semanticNoteId;
+  const activeLineId =
+    lineId ||
+    "main";
+  const activeForkedFromDeckId =
+    forkedFromDeckId ||
+    null;
   const restoreUrl = buildRestoreUrl(
     raw,
     memo,
     output,
     addedCards,
     starred,
-    noteId ??
-      generatePortableId("note"),
+    semanticNoteId,
     publicationSnapshot,
     shareSnapshot,
+    {
+      groupId:
+        lineageGroupId,
+      lineId:
+        activeLineId,
+      forkedFromDeckId:
+        activeForkedFromDeckId,
+    },
   );
   const shortUrl = `${window.location.origin}/deck/${workspaceId}`;
   const longUrl = restoreUrl;
 
   return {
     deckId: workspaceId,
+    noteId:
+      semanticNoteId,
+    groupId:
+      lineageGroupId,
+    lineId:
+      activeLineId,
+    forkedFromDeckId:
+      activeForkedFromDeckId,
     publicationId:
       publicationSnapshot.publicationId,
     publishedAt:
@@ -5738,6 +6141,22 @@ export function useDeckState(props?: UseDeckStateProps) {
     draggingPdf,
     setDraggingPdf,
   } = useDeckEditor(props);
+
+  const [groupId, setGroupId] =
+    useState("");
+
+  const [lineId, setLineId] =
+    useState("main");
+
+  const [
+    forkedFromDeckId,
+    setForkedFromDeckId,
+  ] = useState("");
+
+  const [
+    availableLines,
+    setAvailableLines,
+  ] = useState<string[]>([]);
 
   const isReadOnly =
     props?.readOnly === true ||
@@ -6048,6 +6467,103 @@ export function useDeckState(props?: UseDeckStateProps) {
     setSelectedCardId(allCards[nextIndex].id);
   };
 
+  const saveCurrentLineState = useCallback(() => {
+    const activeGroupId =
+      groupId ||
+      deckId ||
+      "";
+
+    if (!activeGroupId || !lineId) return;
+
+    const map = loadLineStateMap();
+    map[buildLineStateKey(activeGroupId, lineId)] = {
+      raw,
+      memo,
+      output,
+      addedCards,
+      starred,
+    };
+    saveLineStateMap(map);
+  }, [
+    groupId,
+    deckId,
+    lineId,
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+  ]);
+
+  const loadLineState = useCallback((
+    nextLineId: string,
+  ) => {
+    const activeGroupId =
+      groupId ||
+      deckId ||
+      "";
+
+    if (!activeGroupId || !nextLineId) return;
+
+    const map = loadLineStateMap();
+    const key = buildLineStateKey(activeGroupId, nextLineId);
+    const lineState = map[key] ?? {
+      raw,
+      memo,
+      output,
+      addedCards,
+      starred,
+    };
+
+    if (!map[key]) {
+      map[key] = lineState;
+      saveLineStateMap(map);
+    }
+
+    setRaw(lineState.raw);
+    setMemo(lineState.memo);
+    setOutput(lineState.output);
+    setAddedCards(lineState.addedCards);
+    setStarred(lineState.starred);
+  }, [
+    groupId,
+    deckId,
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+    setRaw,
+    setMemo,
+    setOutput,
+    setAddedCards,
+    setStarred,
+  ]);
+
+  const switchLine = useCallback((
+    nextLineId: string,
+  ) => {
+    const normalizedLineId = nextLineId.trim();
+
+    const activeGroupId =
+      groupId ||
+      deckId ||
+      "";
+
+    if (!activeGroupId || !lineId || !normalizedLineId) return;
+    if (normalizedLineId === lineId) return;
+
+    saveCurrentLineState();
+    setLineId(normalizedLineId);
+    loadLineState(normalizedLineId);
+  }, [
+    groupId,
+    lineId,
+    saveCurrentLineState,
+    setLineId,
+    loadLineState,
+  ]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -6069,6 +6585,18 @@ export function useDeckState(props?: UseDeckStateProps) {
             setAddedCards(deck.addedCards || []);
             setStarred(deck.starred || []);
             setDeckId(deck.deckId ?? null);
+            setGroupId(
+              deck.groupId ||
+                deck.noteId ||
+                deck.deckId ||
+                "",
+            );
+            setLineId(deck.lineId || "main");
+            setForkedFromDeckId(
+              deck.forkedFromDeckId ||
+                deck.lineage?.forkedFromDeckId ||
+                "",
+            );
 
             return;
           }
@@ -6095,13 +6623,18 @@ export function useDeckState(props?: UseDeckStateProps) {
           null;
         const sourceDeckId =
           snapshot.sourceDeckId ??
+          snapshot.deckId ??
           null;
         const semanticNoteId =
           snapshot.noteId ??
           snapshot.sourceDeckId ??
+          snapshot.deckId ??
+          snapshot.groupId ??
           generatePortableId("note");
-        const forkedFromDeckId =
-          snapshot.sourceDeckId ??
+        const snapshotForkedFromDeckId =
+          snapshot.forkedFromDeckId ??
+          snapshot.lineage?.forkedFromDeckId ??
+          (restoreMode === "fork" ? sourceDeckId : null) ??
           null;
         const forkedFromShareId =
           snapshot.sourceShareId ??
@@ -6118,7 +6651,8 @@ export function useDeckState(props?: UseDeckStateProps) {
                   sourceDeckId ??
                   migratedDeckId,
 
-                forkedFromDeckId,
+                forkedFromDeckId:
+                  snapshotForkedFromDeckId,
 
                 forkedFromShareId,
               }
@@ -6127,6 +6661,17 @@ export function useDeckState(props?: UseDeckStateProps) {
                   sourceDeckId ??
                   migratedDeckId,
               };
+        const restoredGroupId =
+          snapshot.groupId ||
+          snapshot.lineage?.rootDeckId ||
+          semanticNoteId;
+        const restoredLineId =
+          snapshot.lineId ||
+          "main";
+        const restoredForkedFromDeckId =
+          snapshot.forkedFromDeckId ||
+          lineage.forkedFromDeckId ||
+          "";
 
         setRaw(snapshot.raw ?? "");
         setMemo(snapshot.memo ?? "");
@@ -6134,6 +6679,9 @@ export function useDeckState(props?: UseDeckStateProps) {
         setAddedCards(snapshot.addedCards ?? []);
         setStarred(snapshot.starred ?? []);
         setDeckId(migratedDeckId);
+        setGroupId(restoredGroupId);
+        setLineId(restoredLineId);
+        setForkedFromDeckId(restoredForkedFromDeckId);
         setShowLeft(false);
         setShowRight(false);
         localStorage.setItem(
@@ -6142,6 +6690,9 @@ export function useDeckState(props?: UseDeckStateProps) {
             ...snapshot,
             deckId: migratedDeckId,
             noteId: semanticNoteId,
+            groupId: restoredGroupId,
+            lineId: restoredLineId,
+            forkedFromDeckId: restoredForkedFromDeckId,
             restoreMode,
             sourceDeckId,
             lineage,
@@ -6165,6 +6716,18 @@ export function useDeckState(props?: UseDeckStateProps) {
         setAddedCards(deck.addedCards || []);
         setStarred(deck.starred || []);
         setDeckId(deck.deckId ?? null);
+        setGroupId(
+          deck.groupId ||
+            deck.noteId ||
+            deck.deckId ||
+            "",
+        );
+        setLineId(deck.lineId || "main");
+        setForkedFromDeckId(
+          deck.forkedFromDeckId ||
+            deck.lineage?.forkedFromDeckId ||
+            "",
+        );
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -6187,6 +6750,32 @@ export function useDeckState(props?: UseDeckStateProps) {
       localStorage.removeItem(RESOURCES_STORAGE_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    if (!groupId) {
+      setAvailableLines(["main"]);
+      return;
+    }
+
+    const registry = loadLineRegistry();
+    setAvailableLines(
+      registry[groupId] || ["main"],
+    );
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!groupId || !lineId) return;
+
+    registerLine(
+      groupId,
+      lineId,
+    );
+
+    const registry = loadLineRegistry();
+    setAvailableLines(
+      registry[groupId] || ["main"],
+    );
+  }, [groupId, lineId]);
 
   useEffect(() => {
     try {
@@ -6271,6 +6860,20 @@ export function useDeckState(props?: UseDeckStateProps) {
           noteId:
             savedSnapshot.noteId ??
             null,
+          groupId:
+            groupId ||
+            savedSnapshot.groupId ||
+            savedSnapshot.noteId ||
+            deckId ||
+            null,
+          lineId:
+            lineId ||
+            "main",
+          forkedFromDeckId:
+            forkedFromDeckId ||
+            savedSnapshot.forkedFromDeckId ||
+            savedSnapshot.lineage?.forkedFromDeckId ||
+            null,
 
           restoreMode:
             "revision",
@@ -6292,14 +6895,29 @@ export function useDeckState(props?: UseDeckStateProps) {
             null,
 
           lineage:
-            savedSnapshot.lineage ??
-            null,
+            {
+              ...(savedSnapshot.lineage ?? {}),
+              forkedFromDeckId:
+                forkedFromDeckId ||
+                savedSnapshot.lineage?.forkedFromDeckId ||
+                null,
+            },
         }),
       );
       setSaveStatus("保存済");
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [raw, memo, output, addedCards, starred, deckId]);
+  }, [
+    raw,
+    memo,
+    output,
+    addedCards,
+    starred,
+    deckId,
+    groupId,
+    lineId,
+    forkedFromDeckId,
+  ]);
 
   useEffect(() => {
     if (!draggingLeft) return;
@@ -6428,6 +7046,18 @@ export function useDeckState(props?: UseDeckStateProps) {
         noteId:
           savedSnapshot.noteId ??
           null,
+        groupId:
+          groupId ||
+          savedSnapshot.groupId ||
+          savedSnapshot.lineage?.rootDeckId ||
+          savedSnapshot.noteId ||
+          undefined,
+        lineId,
+        forkedFromDeckId:
+          forkedFromDeckId ||
+          savedSnapshot.forkedFromDeckId ||
+          savedSnapshot.lineage?.forkedFromDeckId ||
+          undefined,
         publication: {
           publicationId:
             publicationId ??
@@ -6439,6 +7069,12 @@ export function useDeckState(props?: UseDeckStateProps) {
       });
 
       setDeckId(result.deckId);
+      setGroupId(result.groupId);
+      setLineId(result.lineId);
+      setForkedFromDeckId(
+        result.forkedFromDeckId ??
+          "",
+      );
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
@@ -6449,6 +7085,14 @@ export function useDeckState(props?: UseDeckStateProps) {
           addedCards,
           starred,
           deckId: result.deckId,
+          noteId:
+            result.noteId,
+          groupId:
+            result.groupId,
+          lineId:
+            result.lineId,
+          forkedFromDeckId:
+            result.forkedFromDeckId,
           restoreMode: "revision",
           publicationId:
             result.publicationId,
@@ -6475,12 +7119,30 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeNoteId =
       savedSnapshot.noteId ??
       generatePortableId("note");
+    const activeGroupId =
+      groupId ||
+      savedSnapshot.groupId ||
+      savedSnapshot.lineage?.rootDeckId ||
+      activeNoteId;
+    const activeForkedFromDeckId =
+      forkedFromDeckId ||
+      savedSnapshot.forkedFromDeckId ||
+      savedSnapshot.lineage?.forkedFromDeckId ||
+      "";
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
       deckId: activeNoteId,
+      identity: {
+        groupId: activeGroupId,
+        lineId,
+      },
+      lineage: {
+        forkedFromDeckId:
+          activeForkedFromDeckId,
+      },
     });
     const timestamp = getTimestampSlug();
     const fileName = getObsidianTitle(title, timestamp);
@@ -6505,9 +7167,32 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeNoteId =
       savedSnapshot.noteId ??
       generatePortableId("note");
+    const activeGroupId =
+      groupId ||
+      savedSnapshot.groupId ||
+      savedSnapshot.lineage?.rootDeckId ||
+      activeNoteId;
+    const activeForkedFromDeckId =
+      forkedFromDeckId ||
+      savedSnapshot.forkedFromDeckId ||
+      savedSnapshot.lineage?.forkedFromDeckId ||
+      "";
 
     await navigator.clipboard.writeText(
-      buildThoughtDeckMd({ raw, memo, output, deckId: activeNoteId }),
+      buildThoughtDeckMd({
+        raw,
+        memo,
+        output,
+        deckId: activeNoteId,
+        identity: {
+          groupId: activeGroupId,
+          lineId,
+        },
+        lineage: {
+          forkedFromDeckId:
+            activeForkedFromDeckId,
+        },
+      }),
     );
     setCopyStatus("MDコピー済");
     window.setTimeout(() => setCopyStatus(""), 1800);
@@ -6520,12 +7205,30 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeNoteId =
       savedSnapshot.noteId ??
       generatePortableId("note");
+    const activeGroupId =
+      groupId ||
+      savedSnapshot.groupId ||
+      savedSnapshot.lineage?.rootDeckId ||
+      activeNoteId;
+    const activeForkedFromDeckId =
+      forkedFromDeckId ||
+      savedSnapshot.forkedFromDeckId ||
+      savedSnapshot.lineage?.forkedFromDeckId ||
+      "";
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
       deckId: activeNoteId,
+      identity: {
+        groupId: activeGroupId,
+        lineId,
+      },
+      lineage: {
+        forkedFromDeckId:
+          activeForkedFromDeckId,
+      },
     });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
@@ -6568,6 +7271,9 @@ export function useDeckState(props?: UseDeckStateProps) {
     setShowRight(false);
 
     setDeckId(null); // ← ★これが足りなかった
+    setGroupId("");
+    setLineId("main");
+    setForkedFromDeckId("");
 
     localStorage.removeItem(STORAGE_KEY);
   };
@@ -6586,6 +7292,9 @@ export function useDeckState(props?: UseDeckStateProps) {
     setFocusMode(false);
     setShowLeft(false);
     setShowRight(false);
+    setGroupId("");
+    setLineId("main");
+    setForkedFromDeckId("");
   };
 
   const confirmLoadDemo = () => {
@@ -6696,6 +7405,15 @@ export function useDeckState(props?: UseDeckStateProps) {
     setQrError,
     deckId,
     setDeckId,
+    groupId,
+    setGroupId,
+    lineId,
+    setLineId,
+    availableLines,
+    setAvailableLines,
+    switchLine,
+    forkedFromDeckId,
+    setForkedFromDeckId,
     selectedCardId,
     setSelectedCardId,
     focusMode,

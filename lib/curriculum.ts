@@ -1,0 +1,28 @@
+export type CurriculumUniverse = Record<
+  string,
+  Record<string, string[]>
+>;
+
+export async function loadCurriculum(): Promise<CurriculumUniverse> {
+  const response = await fetch("/curriculum.json");
+
+  if (!response.ok) {
+    throw new Error("Failed to load curriculum.json");
+  }
+
+  return response.json();
+}
+
+export function buildCurriculumPath(
+  genre?: string,
+  subject?: string,
+  unit?: string,
+) {
+  return [
+    genre,
+    subject,
+    unit,
+  ]
+    .filter(Boolean)
+    .join("/");
+}
