@@ -390,12 +390,18 @@ export default function Home(props: HomeProps) {
   } = useDeckState(mergedProps);
 
   useEffect(() => {
-    if (showCurriculumModal && window.innerWidth < 1024) {
+    if (!showCurriculumModal) return;
+
+    if (window.innerWidth >= 768) return;
+
+    const timer = window.setTimeout(() => {
       curriculumModalRef.current?.scrollIntoView({
         behavior: "smooth",
-        block: "start",
+        block: "center",
       });
-    }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
   }, [showCurriculumModal]);
 
   const quietBaseCardClass =
@@ -1792,10 +1798,12 @@ export default function Home(props: HomeProps) {
 
       {showCurriculumModal && (
         <div
-          ref={curriculumModalRef}
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4"
+          className="fixed inset-0 z-[70] flex justify-center overflow-y-auto bg-black/50 px-4 py-8"
         >
-          <div className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl">
+          <div
+            ref={curriculumModalRef}
+            className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl"
+          >
             <div className="mb-4">
               <h2 className="text-[14pt] font-semibold text-[var(--td-text)]">
                 Obsidianに保存
