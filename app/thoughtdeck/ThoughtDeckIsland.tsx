@@ -1,0 +1,26 @@
+"use client";
+
+import dynamic from "next/dynamic";
+
+type SearchParams = {
+  [key: string]: string | string[] | undefined;
+};
+
+const ThoughtDeckClient = dynamic(
+  () => import("./ThoughtDeckClient"),
+  {
+    ssr: false,
+  },
+);
+
+export default function ThoughtDeckIsland({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  return (
+    <ThoughtDeckClient
+      searchParams={searchParams}
+    />
+  );
+}

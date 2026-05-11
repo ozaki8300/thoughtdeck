@@ -4072,10 +4072,42 @@ export default function Home(props: HomeProps) {
 
 
 ====================
+FILE: app/thoughtdeck/ThoughtDeckIsland.tsx
+====================
+
+"use client";
+
+import dynamic from "next/dynamic";
+
+type SearchParams = {
+  [key: string]: string | string[] | undefined;
+};
+
+const ThoughtDeckClient = dynamic(
+  () => import("./ThoughtDeckClient"),
+  {
+    ssr: false,
+  },
+);
+
+export default function ThoughtDeckIsland({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  return (
+    <ThoughtDeckClient
+      searchParams={searchParams}
+    />
+  );
+}
+
+
+====================
 FILE: app/thoughtdeck/page.tsx
 ====================
 
-import ThoughtDeckClient from "./ThoughtDeckClient";
+import ThoughtDeckIsland from "./ThoughtDeckIsland";
 
 type SearchParams = {
   [key: string]: string | string[] | undefined;
@@ -4089,7 +4121,7 @@ export default async function Page({
   const resolvedSearchParams = await searchParams;
 
   return (
-    <ThoughtDeckClient
+    <ThoughtDeckIsland
       searchParams={resolvedSearchParams}
     />
   );
@@ -6613,10 +6645,20 @@ export function useDeckState(props?: UseDeckStateProps) {
     setAvailableLines,
   ] = useState<string[]>([]);
 
-  const isReadOnly =
-    props?.readOnly === true ||
-    (typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("ro") === "1");
+  const [isReadOnly, setIsReadOnly] = useState(
+    props?.readOnly === true,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const ro =
+      new URLSearchParams(window.location.search).get("ro") === "1";
+
+    if (ro) {
+      setIsReadOnly(true);
+    }
+  }, [props?.readOnly]);
 
   const perspective = placeholderSets[perspectiveIndex];
 

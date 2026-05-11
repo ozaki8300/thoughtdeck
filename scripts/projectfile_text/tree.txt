@@ -17,6 +17,7 @@ app/
 ├── page.tsx
 └── thoughtdeck/
     ├── ThoughtDeckClient.tsx
+    ├── ThoughtDeckIsland.tsx
     └── page.tsx
 
 lib/

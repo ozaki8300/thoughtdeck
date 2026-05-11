@@ -918,10 +918,20 @@ export function useDeckState(props?: UseDeckStateProps) {
     setAvailableLines,
   ] = useState<string[]>([]);
 
-  const isReadOnly =
-    props?.readOnly === true ||
-    (typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("ro") === "1");
+  const [isReadOnly, setIsReadOnly] = useState(
+    props?.readOnly === true,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const ro =
+      new URLSearchParams(window.location.search).get("ro") === "1";
+
+    if (ro) {
+      setIsReadOnly(true);
+    }
+  }, [props?.readOnly]);
 
   const perspective = placeholderSets[perspectiveIndex];
 

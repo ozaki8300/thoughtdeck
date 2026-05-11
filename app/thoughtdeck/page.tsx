@@ -1,4 +1,4 @@
-import ThoughtDeckClient from "./ThoughtDeckClient";
+import ThoughtDeckIsland from "./ThoughtDeckIsland";
 
 type SearchParams = {
   [key: string]: string | string[] | undefined;
@@ -12,7 +12,7 @@ export default async function Page({
   const resolvedSearchParams = await searchParams;
 
   return (
-    <ThoughtDeckClient
+    <ThoughtDeckIsland
       searchParams={resolvedSearchParams}
     />
   );
