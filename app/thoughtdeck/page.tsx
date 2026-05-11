@@ -397,7 +397,7 @@ export default function Home(props: HomeProps) {
     const timer = window.setTimeout(() => {
       curriculumModalRef.current?.scrollIntoView({
         behavior: "smooth",
-        block: "center",
+        block: "start",
       });
     }, 120);
 
@@ -1798,13 +1798,13 @@ export default function Home(props: HomeProps) {
 
       {showCurriculumModal && (
         <div
-          className="fixed inset-0 z-[70] flex justify-center overflow-y-auto bg-black/50 px-4 py-8"
+          className="fixed inset-0 z-[70] flex justify-center overflow-hidden bg-black/50 px-4 py-8"
         >
           <div
             ref={curriculumModalRef}
-            className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl"
+            className="flex max-h-[88vh] w-full max-w-6xl flex-col rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl"
           >
-            <div className="mb-4">
+            <div className="mb-4 shrink-0">
               <h2 className="text-[14pt] font-semibold text-[var(--td-text)]">
                 Obsidianに保存
               </h2>
@@ -1813,7 +1813,7 @@ export default function Home(props: HomeProps) {
               </p>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 flex min-h-0 flex-1 flex-col space-y-3">
               <input
                 value={curriculumSearch}
                 onChange={(event) => {
@@ -1824,7 +1824,7 @@ export default function Home(props: HomeProps) {
                 className="w-full rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
               />
 
-              <div className="max-h-[75vh] overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
                 <div className="mb-3 text-xs text-[var(--td-muted)]">
                   {filteredCurriculum.length}
                   {" "}
@@ -1904,7 +1904,7 @@ export default function Home(props: HomeProps) {
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex shrink-0 justify-end gap-2 border-t border-[var(--td-border)] bg-[var(--td-bg)] px-1 pt-4 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
               <button
                 type="button"
                 onClick={() => {
@@ -1912,7 +1912,7 @@ export default function Home(props: HomeProps) {
                   setSelectedCurriculum(null);
                   setShowCurriculumModal(false);
                 }}
-                className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
+                className="rounded-lg border border-[var(--td-border)] px-5 py-2 text-[11pt] text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]"
               >
                 Cancel
               </button>
@@ -1931,7 +1931,7 @@ export default function Home(props: HomeProps) {
                   setShowCurriculumModal(false);
                 }}
                 disabled={!selectedCurriculum || !unit}
-                className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-[11pt] text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg border border-[var(--td-accent-border)] px-5 py-2 text-[11pt] text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save
               </button>
