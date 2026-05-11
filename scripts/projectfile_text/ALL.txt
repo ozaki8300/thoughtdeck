@@ -1917,7 +1917,7 @@ export default function Home() {
 
 
 ====================
-FILE: app/thoughtdeck/page.tsx
+FILE: app/thoughtdeck/ThoughtDeckClient.tsx
 ====================
 
 "use client";
@@ -1947,7 +1947,7 @@ import type { Card, OneColumnSection, UseDeckStateProps } from "../../lib/useDec
 
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const DRAFT_STORAGE_KEY = "thoughtdeck:draft:v1";
 const CARD_COLOR_ORDER = ["", "blue", "green", "purple", "orange"] as const;
@@ -2130,7 +2130,7 @@ function renderMarkdownBlocks(text: string, emptyText = "本文は素材欄に�
 }
 
 type HomeProps = UseDeckStateProps & {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  searchParams: { [key: string]: string | string[] | undefined };
 };
 
 export default function Home(props: HomeProps) {
@@ -2144,7 +2144,7 @@ export default function Home(props: HomeProps) {
   const [openAbout, setOpenAbout] = useState(false);
   const [isRestoredFromUrl, setIsRestoredFromUrl] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
-  const searchParams = use(props.searchParams);
+  const searchParams = props.searchParams;
   const snapshotReadOnly = searchParams.ro === "1";
   const rawContext = searchParams.context;
   const context =
@@ -4067,6 +4067,31 @@ export default function Home(props: HomeProps) {
         </div>
       </footer>
     </main>
+  );
+}
+
+
+====================
+FILE: app/thoughtdeck/page.tsx
+====================
+
+import ThoughtDeckClient from "./ThoughtDeckClient";
+
+type SearchParams = {
+  [key: string]: string | string[] | undefined;
+};
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const resolvedSearchParams = await searchParams;
+
+  return (
+    <ThoughtDeckClient
+      searchParams={resolvedSearchParams}
+    />
   );
 }
 
