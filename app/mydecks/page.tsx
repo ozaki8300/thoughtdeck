@@ -1069,11 +1069,6 @@ export default function MyDecksPage() {
     window.location.assign(`/thoughtdeck?${params.toString()}`);
   };
 
-  const removeDeck = (event: React.MouseEvent<HTMLButtonElement>, key: string) => {
-    event.stopPropagation();
-    setDecks((current) => current.filter((deck) => deckKey(deck) !== key));
-  };
-
   const updateStar = (
     event: React.MouseEvent<HTMLButtonElement>,
     key: string,
@@ -1086,25 +1081,8 @@ export default function MyDecksPage() {
   };
 
   return (
-    <main className="mydecks-page td-app-enter min-h-screen overflow-x-hidden bg-[var(--td-bg)] px-5 py-6 text-[var(--td-text)]">
+    <main data-theme="auto" className="mydecks-page td-app-enter min-h-screen overflow-x-hidden bg-[var(--td-bg)] px-5 py-6 text-[var(--td-text)]">
       <style jsx global>{`
-        .mydecks-page {
-          --td-bg: #0f172a;
-          --td-panel: rgba(15, 23, 42, 0.88);
-          --td-surface-soft: rgba(22, 32, 51, 0.74);
-          --td-border: rgba(148, 163, 184, 0.18);
-          --td-border-strong: rgba(148, 163, 184, 0.32);
-          --td-text: #e5e7eb;
-          --td-text-soft: #cbd5e1;
-          --td-muted: #94a3b8;
-          --td-hover: rgba(37, 99, 235, 0.12);
-          --td-card-bg: rgba(17, 24, 39, 0.72);
-          --td-card-border-hover: rgba(96, 165, 250, 0.38);
-          --td-accent: #93c5fd;
-          --td-accent-bg: rgba(37, 99, 235, 0.14);
-          --td-accent-border: rgba(96, 165, 250, 0.46);
-        }
-
         @keyframes td-app-enter {
           0% {
             opacity: 0;
@@ -1122,7 +1100,7 @@ export default function MyDecksPage() {
           animation: td-app-enter 0.42s ease-out 1 both;
         }
       `}</style>
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-4xl">
         <header className="mb-6 flex items-center justify-between gap-4">
           <div>
             <button
@@ -1262,17 +1240,17 @@ export default function MyDecksPage() {
               groupedDecks.map((group) => (
                 <div
                   key={group.groupKey}
-                  className="grid gap-5 border-l border-[var(--td-border)]/8 py-1 pl-3 transition-colors duration-500 hover:border-[var(--td-accent-border)]/32 hover:bg-[var(--td-hover)]/10 hover:shadow-[0_0_24px_rgba(96,165,250,0.025)] sm:gap-4"
+                  className="grid gap-3 rounded-3xl border border-[var(--td-border)] bg-[var(--td-surface-soft)] p-4 sm:gap-3"
                 >
                   {group.groupKey !== "Ungrouped" && (
-                    <div className="mb-2 sm:mb-1">
+                    <div className="mb-1 sm:mb-0">
                       <div className="flex items-baseline justify-between gap-4">
-                        <h2 className="text-[11px] font-normal uppercase tracking-[0.02em] text-[var(--td-muted)] opacity-45">
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--td-muted)] opacity-80">
                           {group.groupKey.replaceAll("/", " / ")}
                         </h2>
                       </div>
                       {group.memoryCue && (
-                        <p className="mt-0.5 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
+                        <p className="mt-0.5 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-75">
                           {group.memoryCue}
                         </p>
                       )}
@@ -1293,37 +1271,37 @@ export default function MyDecksPage() {
                     return (
                       <div
                         key={lineage.groupId}
-                        className="rounded-xl border border-[var(--td-border)]/10 p-3"
+                        className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] p-3 shadow-sm"
                       >
-                        <div className="mb-3 min-w-0">
+                        <div className="mb-2.5 min-w-0">
                           <button
                             type="button"
                             onClick={() => toggleLineage(lineage.groupId)}
-                            className="flex max-w-full items-center gap-2 text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--td-muted)] opacity-35 transition hover:opacity-100"
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--td-border)] bg-[var(--td-surface)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--td-muted)] transition hover:border-[var(--td-border-strong)] hover:text-[var(--td-text-soft)]"
                           >
                             <span>
                               {isLineageExpanded ? "▼" : "▶"}
                             </span>
 
                             <span className="min-w-0 truncate">
-                              {`lineage (${lineage.decks.length})`}
+                              {`◉ lineage (${lineage.decks.length})`}
                             </span>
                           </button>
 
                           {isLineageExpanded && (
                             <>
-                              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                                <span className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-20">
+                              <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                                <span className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-50">
                                   {lineage.groupId}
                                 </span>
                                 {formatRelativeTime(lineage.latestUpdatedAt) && (
-                                  <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-20">
+                                  <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-50">
                                     {formatRelativeTime(lineage.latestUpdatedAt)}
                                   </span>
                                 )}
                               </div>
                               {lineage.memoryCue && (
-                                <p className="mt-1 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
+                                <p className="mt-1 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-75">
                                   {lineage.memoryCue}
                                 </p>
                               )}
@@ -1334,39 +1312,37 @@ export default function MyDecksPage() {
                         {!isLineageExpanded && previewDeck && (
                           <article
                             onClick={() => openDeck(previewDeck)}
-                            className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-transparent bg-transparent p-3 transition-[border-color,background-color] duration-200 hover:border-[var(--td-border)]/30 hover:bg-[var(--td-hover)]/18 ${
-                              highlightedKeys.includes(previewKey) ? "bg-[var(--td-hover)]" : ""
+                            className={`group min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] px-4 py-3 shadow-sm transition-all duration-200 hover:border-[var(--td-border-strong)] hover:shadow-sm ${
+                              highlightedKeys.includes(previewKey) ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)]" : ""
                             }`}
                           >
                             <div className="min-w-0">
-                              <p className="line-clamp-1 text-[15px] font-medium leading-6 text-[var(--td-text)]">
+                              <p className="line-clamp-1 text-base font-semibold leading-6 text-[var(--td-text)]">
+                                {previewDeck.title}
+                              </p>
+
+                              <p className="mt-1.5 line-clamp-2 text-sm italic leading-6 text-[var(--td-text-soft)]">
                                 {previewDeck.trigger ? previewDeck.trigger : "（要約なし）"}
                               </p>
 
                               <div className="mt-2 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
-                                <h2 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4 text-[var(--td-muted)] opacity-[0.28]">
-                                  {previewDeck.title}
-                                </h2>
+                                <p className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-[0.42]">
+                                  {formatDate(previewDeck.updated_at || previewDeck.created_at)}
+                                </p>
 
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <div className="flex gap-0.5">
+                                <div className="flex shrink-0 gap-0.5">
                                   {[1, 2, 3, 4, 5].map((value) => (
                                     <button
                                       key={value}
                                       onClick={(event) => updateStar(event, previewKey, value)}
-                                      className={`text-sm opacity-0 transition group-hover:opacity-100 hover:text-yellow-300 ${
-                                        value <= previewDeck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
+                                      className={`text-sm opacity-35 transition hover:opacity-60 ${
+                                        value <= previewDeck.star ? "text-[var(--td-accent)] opacity-60" : "text-[var(--td-muted)]"
                                       }`}
                                       title={`${value} stars`}
                                     >
                                       ★
                                     </button>
                                   ))}
-                                  </div>
-
-                                  <p className="shrink-0 text-[10px] text-[var(--td-muted)] opacity-[0.18]">
-                                    {formatDate(previewDeck.updated_at || previewDeck.created_at)}
-                                  </p>
                                 </div>
                               </div>
                             </div>
@@ -1378,9 +1354,9 @@ export default function MyDecksPage() {
                         {lineage.lines.map((line) => (
                           <div
                             key={line.lineId}
-                            className="rounded-lg border border-[var(--td-border)]/20 p-3"
+                            className="rounded-xl bg-transparent p-1"
                           >
-                            <div className="grid gap-4">
+                            <div className="grid gap-3">
                               {line.decks.map((deck) => {
                                 const key = deckKey(deck);
 
@@ -1388,50 +1364,39 @@ export default function MyDecksPage() {
                                   <article
                                     key={key}
                                     onClick={() => openDeck(deck)}
-                                    className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-transparent bg-transparent p-3 transition-[border-color,background-color] duration-200 hover:border-[var(--td-border)]/30 hover:bg-[var(--td-hover)]/18 ${
-                                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : ""
+                                    className={`group min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] px-4 py-3 shadow-sm transition-all duration-200 hover:border-[var(--td-border-strong)] hover:shadow-sm ${
+                                      highlightedKeys.includes(key) ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)]" : ""
                                     }`}
                                   >
                                     <div className="min-w-0">
-                                      <p className="line-clamp-1 text-[15px] font-medium leading-6 text-[var(--td-text)]">
+                                      <p className="line-clamp-1 text-base font-semibold leading-6 text-[var(--td-text)]">
+                                        {deck.title}
+                                      </p>
+
+                                      <p className="mt-1.5 line-clamp-2 text-sm italic leading-6 text-[var(--td-text-soft)]">
                                         {deck.trigger ? deck.trigger : "（要約なし）"}
                                       </p>
 
                                       <div className="mt-2 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
-                                        <h2 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4 text-[var(--td-muted)] opacity-[0.28]">
-                                          {deck.title}
-                                        </h2>
+                                        <p className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-[0.42]">
+                                          {formatDate(deck.created_at)}
+                                        </p>
 
-                                        <div className="flex shrink-0 items-center gap-2">
-                                          <div className="flex gap-0.5">
+                                        <div className="flex shrink-0 gap-0.5">
                                           {[1, 2, 3, 4, 5].map((value) => (
                                             <button
                                               key={value}
                                               onClick={(event) => updateStar(event, key, value)}
-                                              className={`text-sm opacity-0 transition group-hover:opacity-100 hover:text-yellow-300 ${
-                                                value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
+                                              className={`text-sm opacity-35 transition hover:opacity-60 ${
+                                                value <= deck.star ? "text-[var(--td-accent)] opacity-60" : "text-[var(--td-muted)]"
                                               }`}
                                               title={`${value} stars`}
                                             >
                                               ★
                                             </button>
                                           ))}
-                                          </div>
-
-                                          <p className="shrink-0 text-[10px] text-[var(--td-muted)] opacity-[0.18]">
-                                            {formatDate(deck.created_at)}
-                                          </p>
                                         </div>
                                       </div>
-                                    </div>
-
-                                    <div className="mt-4 flex justify-end opacity-0 transition group-hover:opacity-100">
-                                      <button
-                                        onClick={(event) => removeDeck(event, key)}
-                                        className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                                      >
-                                        削除
-                                      </button>
                                     </div>
                                   </article>
                                 );
@@ -1451,7 +1416,7 @@ export default function MyDecksPage() {
 
         </div>
         {isDragging && (
-          <div className="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/40 text-lg text-[var(--td-text)]">
+          <div className="pointer-events-none fixed inset-0 flex items-center justify-center bg-[var(--td-overlay)] text-lg text-[var(--td-text)]">
             ファイルをドロップして更新
           </div>
         )}

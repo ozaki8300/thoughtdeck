@@ -1594,7 +1594,8 @@ export function useDeckState(props?: UseDeckStateProps) {
 
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+      const savedTheme =
+        (localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null) ?? "auto";
       if (savedTheme === "auto" || savedTheme === "light" || savedTheme === "dark") {
         setThemeMode(savedTheme);
       }

@@ -21,7 +21,10 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="flex min-h-screen -mt-4 items-center justify-center bg-white text-black dark:bg-[var(--td-bg)] dark:text-blue-100 sm:mt-0">
+    <main
+      data-theme="auto"
+      className="flex min-h-screen -mt-4 items-center justify-center bg-[var(--td-bg)] text-[var(--td-text)] sm:mt-0"
+    >
       <div className="flex flex-col items-center gap-6 text-center">
 
         {/* タイトル */}
@@ -59,7 +62,7 @@ export default function Home() {
         >
           <button
             onClick={() => router.push("/thoughtdeck")}
-            className="hidden sm:block rounded-lg border border-blue-400/70 px-6 py-3 hover:bg-blue-500/20 transition"
+            className="hidden sm:block rounded-lg border border-[var(--td-accent-border)] px-6 py-3 transition hover:bg-[var(--td-hover)]"
           >
             Start Thinking
           </button>
@@ -67,7 +70,7 @@ export default function Home() {
           {hasDeck && (
             <button
               onClick={() => router.push("/mydecks")}
-              className="rounded-lg border border-blue-400/40 px-6 py-3 hover:bg-blue-500/10 transition text-sm"
+              className="rounded-lg border border-[var(--td-accent-border)] px-6 py-3 text-sm transition hover:bg-[var(--td-hover)]"
             >
               Open My Decks
             </button>

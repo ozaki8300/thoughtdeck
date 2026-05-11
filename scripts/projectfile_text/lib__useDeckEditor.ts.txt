@@ -52,7 +52,7 @@ export function useDeckEditor(props?: UseDeckStateProps) {
   const [openTopMenu, setOpenTopMenu] = useState<"more" | "display" | "export" | "resources" | "theme" | null>(null);
   const topMenuRef = useRef<HTMLDivElement | null>(null);
   const memoRef = useRef<HTMLElement | null>(null);
-  const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
   const [customLinks, setCustomLinks] = useState<{ label: string; url: string }[]>([]);
   const [customLinkLabel, setCustomLinkLabel] = useState("");
   const [customLinkUrl, setCustomLinkUrl] = useState("");
