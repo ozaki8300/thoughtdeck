@@ -245,6 +245,7 @@ export default function Home(props: HomeProps) {
   const hasShownInputGuide = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const memoRefLocal = useRef<HTMLTextAreaElement | null>(null);
+  const curriculumModalRef = useRef<HTMLDivElement | null>(null);
   const mergedProps = {
     ...props,
     readOnly: props.readOnly || isReadOnly,
@@ -391,6 +392,22 @@ export default function Home(props: HomeProps) {
     createShare,
     copyTemplateBundle,
   } = useDeckState(mergedProps);
+
+  useEffect(() => {
+    if (!showCurriculumModal) return;
+
+    if (window.innerWidth >= 768) return;
+
+    const timer = window.setTimeout(() => {
+      curriculumModalRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [showCurriculumModal]);
+
   const quietBaseCardClass =
     "border-[var(--td-card-border)] bg-[var(--td-card-bg)] text-[var(--td-text)] hover:border-[var(--td-border-strong)] hover:shadow-[0_6px_18px_rgba(15,23,42,0.18)]";
   const isPublishedSnapshot =
@@ -1784,8 +1801,13 @@ export default function Home(props: HomeProps) {
       <AboutModal isOpen={openAbout} onClose={() => setOpenAbout(false)} />
 
       {showCurriculumModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl">
+        <div
+          className="fixed inset-0 z-[70] flex justify-center overflow-y-auto bg-black/50 px-4 py-8"
+        >
+          <div
+            ref={curriculumModalRef}
+            className="w-full max-w-6xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 shadow-2xl"
+          >
             <div className="mb-4">
               <h2 className="text-[14pt] font-semibold text-[var(--td-text)]">
                 Obsidianに保存
@@ -2050,7 +2072,7 @@ export default function Home(props: HomeProps) {
                     <div className="flex items-center gap-2">
                       {!isReadOnly && (
                         <>
-                          <button onClick={openMemoEditor} className={panelButtonClass}>編集 <span className="shortcut">(Ctrl+E)</span></button>
+                          <button onClick={openMemoEditor} className={`${panelButtonClass} max-lg:hidden`}>編集 <span className="shortcut">(Ctrl+E)</span></button>
                           <div className="flex items-center gap-1 rounded-lg border border-[var(--td-border-strong)] bg-[var(--td-panel)] p-0.5">
                             <button
                               onClick={() => setMemoMode("edit")}

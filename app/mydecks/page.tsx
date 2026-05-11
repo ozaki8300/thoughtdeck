@@ -388,28 +388,92 @@ function getMemoPreview(memo: string) {
   return line ? line.replace(/^#{1,6}\s+/, "").trim() : "（メモなし）";
 }
 
-function generateTrigger(raw: string, memo: string, output: string) {
-  const clean = (text: string) =>
+function extractIssue(text: string) {
+  const lines = text.split(/\r?\n/);
+  const issueIndex = lines.findIndex((line) =>
+    /^\s*#{2,6}\s*ISSUE\b/i.test(line),
+  );
+
+  if (issueIndex < 0) return "";
+
+  const inlineIssue = lines[issueIndex]
+    .replace(/^\s*#{2,6}\s*ISSUE\b[:：-]?\s*/i, "")
+    .trim();
+
+  if (inlineIssue) return inlineIssue;
+
+  for (const line of lines.slice(issueIndex + 1)) {
+    const trimmed = line.trim();
+
+    if (!trimmed) continue;
+    if (/^\s*#{1,6}\s+/.test(trimmed)) break;
+    if (/^---+$/.test(trimmed)) break;
+
+    return trimmed;
+  }
+
+  return "";
+}
+
+function extractBold(text: string) {
+  const match = text.match(/\*\*([^*\n]{4,40})\*\*/);
+  return match?.[1]?.trim() ?? "";
+}
+
+function extractBullet(text: string) {
+  const line = text
+    .split(/\r?\n/)
+    .find((value) => /^\s*[-*]\s+\S/.test(value));
+
+  return line ? line.replace(/^\s*[-*]\s+/, "").trim() : "";
+}
+
+function generateTrigger(
+  title: string,
+  raw: string,
+  memo: string,
+  output: string,
+) {
+  const clean = (
+    text: string,
+    title = "",
+  ) =>
     text
-      .replace(/\n/g, " ")
-      .replace(/[#\-*]/g, "")
+      .replace(/\r?\n/g, " ")
+      .replace(/@area:\s*(left|center|right)/gi, "")
+      .replace(/#{1,6}\s*/g, "")
+      .replace(/\b(ISSUE|事実|示唆|論点)\b/gi, "")
+      .replace(/\bver\d+\b/gi, "")
+      .replace(/[*\-]/g, "")
+      .replace(/\s+/g, " ")
+      .replace(title, "")
       .trim();
+  const quoteCue = (text: string) => {
+    const cue = clean(text, title);
 
-  // 投稿優先
-  if (output?.trim()) {
-    return clean(output).slice(0, 60);
-  }
+    return cue ? `「${cue.slice(0, 36)}」` : "";
+  };
+  const extractQuoted = (text: string) => {
+    const quoted = text.match(/「([^」]{4,40})」/);
 
-  // fallback
-  if (memo?.trim()) {
-    return clean(memo).slice(0, 60);
-  }
+    if (quoted) {
+      return `「${quoted[1]}」`;
+    }
 
-  if (raw?.trim()) {
-    return clean(raw).slice(0, 60);
-  }
+    return "";
+  };
+  const candidates = [output, memo, raw].filter((text) => text?.trim());
+  const quoted = candidates.map(extractQuoted).find(Boolean);
+  const issue = quoteCue(extractIssue(raw));
+  const bold = candidates.map(extractBold).map(quoteCue).find(Boolean);
+  const bullet = candidates.map(extractBullet).map(quoteCue).find(Boolean);
 
-  return "（要約なし）";
+  if (quoted) return quoted;
+  if (issue) return issue;
+  if (bold) return bold;
+  if (bullet) return bullet;
+
+  return candidates.length > 0 ? clean(candidates[0], title).slice(0, 36) : "（要約なし）";
 }
 
 function formatDate(value: string) {
@@ -532,7 +596,12 @@ function parseDeck(text: string): Deck | null {
     unit,
     image_ref,
     star: 0,
-    trigger: generateTrigger(raw, memo, output),
+    trigger: generateTrigger(
+      title,
+      raw,
+      memo,
+      output,
+    ),
     keywords,
     links,
     raw,
@@ -560,6 +629,8 @@ export default function MyDecksPage() {
   const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
   const [hasDraft, setHasDraft] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [expandedLineages, setExpandedLineages] =
+    useState<Record<string, boolean>>({});
   const [hasLoadedLocalData, setHasLoadedLocalData] = useState(false);
   const [vaultHandle, setVaultHandle] =
     useState<FileSystemDirectoryHandle | null>(null);
@@ -572,6 +643,13 @@ export default function MyDecksPage() {
   );
   const groupedDecks =
     groupDecksByPath(visibleDecks);
+
+  const toggleLineage = (groupId: string) => {
+    setExpandedLineages((current) => ({
+      ...current,
+      [groupId]: !current[groupId],
+    }));
+  };
 
   useEffect(() => {
     setDecks(loadSavedDecks());
@@ -1124,7 +1202,7 @@ export default function MyDecksPage() {
               </div>
 
               {importMessage && (
-                <span className="break-words text-sm text-[var(--td-accent)]">{importMessage}</span>
+                <span className="break-words text-xs text-[var(--td-muted)] opacity-35 transition hover:opacity-80">{importMessage}</span>
               )}
 
               <div className="hidden flex-wrap items-center gap-2 sm:flex">
@@ -1184,17 +1262,14 @@ export default function MyDecksPage() {
               groupedDecks.map((group) => (
                 <div
                   key={group.groupKey}
-                  className="grid gap-5 border-l border-[var(--td-accent-border)]/25 py-1 pl-3 transition-colors duration-500 hover:border-[var(--td-accent-border)]/32 hover:bg-[var(--td-hover)]/10 hover:shadow-[0_0_24px_rgba(96,165,250,0.025)] sm:gap-4"
+                  className="grid gap-5 border-l border-[var(--td-border)]/8 py-1 pl-3 transition-colors duration-500 hover:border-[var(--td-accent-border)]/32 hover:bg-[var(--td-hover)]/10 hover:shadow-[0_0_24px_rgba(96,165,250,0.025)] sm:gap-4"
                 >
                   {group.groupKey !== "Ungrouped" && (
                     <div className="mb-2 sm:mb-1">
                       <div className="flex items-baseline justify-between gap-4">
-                        <h2 className="text-sm font-medium tracking-[0.01em] text-[var(--td-text-soft)] opacity-85">
+                        <h2 className="text-[11px] font-normal uppercase tracking-[0.02em] text-[var(--td-muted)] opacity-45">
                           {group.groupKey.replaceAll("/", " / ")}
                         </h2>
-                        <span className="shrink-0 text-xs tracking-wide text-[var(--td-muted)] opacity-40">
-                          {group.deckCount} decks
-                        </span>
                       </div>
                       {group.memoryCue && (
                         <p className="mt-0.5 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
@@ -1209,60 +1284,102 @@ export default function MyDecksPage() {
                     </div>
                   )}
 
-                  {group.lineages.map((lineage) => (
-                    <div
-                      key={lineage.groupId}
-                      className="rounded-xl border border-[var(--td-border)]/40 p-3"
-                    >
-                      <div className="mb-3 min-w-0">
-                        <div className="flex min-w-0 items-baseline justify-between gap-3">
-                          <h3 className="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-[var(--td-muted)] opacity-70">
-                            Lineage
-                          </h3>
-                          <span className="shrink-0 text-xs tracking-wide text-[var(--td-muted)] opacity-45">
-                            {lineage.decks.length} decks
-                          </span>
-                        </div>
-                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                          <span className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-45">
-                            {lineage.groupId}
-                          </span>
-                          {formatRelativeTime(lineage.latestUpdatedAt) && (
-                            <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-45">
-                              {formatRelativeTime(lineage.latestUpdatedAt)}
-                            </span>
-                          )}
-                          {lineage.originDeckId && (
-                            <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-45">
-                              Origin {shortDeckId(lineage.originDeckId)}
-                            </span>
-                          )}
-                        </div>
-                        {lineage.memoryCue && (
-                          <p className="mt-1 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
-                            {lineage.memoryCue}
-                          </p>
-                        )}
-                      </div>
+                  {group.lineages.map((lineage) => {
+                    const isLineageExpanded =
+                      !!expandedLineages[lineage.groupId];
+                    const previewDeck = lineage.decks[0];
+                    const previewKey = previewDeck ? deckKey(previewDeck) : "";
 
-                      <div className="grid gap-3">
+                    return (
+                      <div
+                        key={lineage.groupId}
+                        className="rounded-xl border border-[var(--td-border)]/10 p-3"
+                      >
+                        <div className="mb-3 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleLineage(lineage.groupId)}
+                            className="flex max-w-full items-center gap-2 text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--td-muted)] opacity-35 transition hover:opacity-100"
+                          >
+                            <span>
+                              {isLineageExpanded ? "▼" : "▶"}
+                            </span>
+
+                            <span className="min-w-0 truncate">
+                              {`lineage (${lineage.decks.length})`}
+                            </span>
+                          </button>
+
+                          {isLineageExpanded && (
+                            <>
+                              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                                <span className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-20">
+                                  {lineage.groupId}
+                                </span>
+                                {formatRelativeTime(lineage.latestUpdatedAt) && (
+                                  <span className="shrink-0 text-xs text-[var(--td-muted)] opacity-20">
+                                    {formatRelativeTime(lineage.latestUpdatedAt)}
+                                  </span>
+                                )}
+                              </div>
+                              {lineage.memoryCue && (
+                                <p className="mt-1 line-clamp-1 text-sm italic text-[var(--td-muted)] opacity-60">
+                                  {lineage.memoryCue}
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {!isLineageExpanded && previewDeck && (
+                          <article
+                            onClick={() => openDeck(previewDeck)}
+                            className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-transparent bg-transparent p-3 transition-[border-color,background-color] duration-200 hover:border-[var(--td-border)]/30 hover:bg-[var(--td-hover)]/18 ${
+                              highlightedKeys.includes(previewKey) ? "bg-[var(--td-hover)]" : ""
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="line-clamp-1 text-[15px] font-medium leading-6 text-[var(--td-text)]">
+                                {previewDeck.trigger ? previewDeck.trigger : "（要約なし）"}
+                              </p>
+
+                              <div className="mt-2 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
+                                <h2 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4 text-[var(--td-muted)] opacity-[0.28]">
+                                  {previewDeck.title}
+                                </h2>
+
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <div className="flex gap-0.5">
+                                  {[1, 2, 3, 4, 5].map((value) => (
+                                    <button
+                                      key={value}
+                                      onClick={(event) => updateStar(event, previewKey, value)}
+                                      className={`text-sm opacity-0 transition group-hover:opacity-100 hover:text-yellow-300 ${
+                                        value <= previewDeck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
+                                      }`}
+                                      title={`${value} stars`}
+                                    >
+                                      ★
+                                    </button>
+                                  ))}
+                                  </div>
+
+                                  <p className="shrink-0 text-[10px] text-[var(--td-muted)] opacity-[0.18]">
+                                    {formatDate(previewDeck.updated_at || previewDeck.created_at)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        )}
+
+                        {isLineageExpanded && (
+                          <div className="grid gap-3">
                         {lineage.lines.map((line) => (
                           <div
                             key={line.lineId}
                             className="rounded-lg border border-[var(--td-border)]/20 p-3"
                           >
-                            <div className="mb-3 flex min-w-0 flex-wrap items-baseline justify-between gap-2">
-                              <h4 className="min-w-0 truncate text-xs font-medium text-[var(--td-muted)] opacity-70">
-                                Line: {line.lineId || "main"}
-                              </h4>
-                              <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--td-muted)] opacity-45">
-                                <span>{line.decks.length} decks</span>
-                                {formatRelativeTime(line.latestUpdatedAt) && (
-                                  <span>{formatRelativeTime(line.latestUpdatedAt)}</span>
-                                )}
-                              </div>
-                            </div>
-
                             <div className="grid gap-4">
                               {line.decks.map((deck) => {
                                 const key = deckKey(deck);
@@ -1271,30 +1388,27 @@ export default function MyDecksPage() {
                                   <article
                                     key={key}
                                     onClick={() => openDeck(deck)}
-                                    className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-[var(--td-border)] p-5 transition-[border-color,background-color,box-shadow] duration-300 ease-out hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:shadow-[0_8px_20px_rgba(15,23,42,0.22)] sm:p-4 ${
-                                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : "bg-[var(--td-card-bg)]"
+                                    className={`group min-w-0 overflow-hidden cursor-pointer rounded-xl border border-transparent bg-transparent p-3 transition-[border-color,background-color] duration-200 hover:border-[var(--td-border)]/30 hover:bg-[var(--td-hover)]/18 ${
+                                      highlightedKeys.includes(key) ? "bg-[var(--td-hover)]" : ""
                                     }`}
                                   >
                                     <div className="min-w-0">
-                                      <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--td-muted)] opacity-50">
-                                        {!deck.forked_from_deck_id ? (
-                                          <span>Origin</span>
-                                        ) : (
-                                          <span>
-                                            forked from {shortDeckId(deck.forked_from_deck_id)}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex min-w-0 items-start justify-between gap-3 overflow-hidden">
-                                        <h2 className="min-w-0 flex-1 truncate text-sm leading-6 text-[var(--td-muted)] sm:leading-normal">
+                                      <p className="line-clamp-1 text-[15px] font-medium leading-6 text-[var(--td-text)]">
+                                        {deck.trigger ? deck.trigger : "（要約なし）"}
+                                      </p>
+
+                                      <div className="mt-2 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
+                                        <h2 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4 text-[var(--td-muted)] opacity-[0.28]">
                                           {deck.title}
                                         </h2>
-                                        <div className="flex shrink-0 gap-0.5">
+
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          <div className="flex gap-0.5">
                                           {[1, 2, 3, 4, 5].map((value) => (
                                             <button
                                               key={value}
                                               onClick={(event) => updateStar(event, key, value)}
-                                              className={`text-sm transition hover:text-yellow-300 ${
+                                              className={`text-sm opacity-0 transition group-hover:opacity-100 hover:text-yellow-300 ${
                                                 value <= deck.star ? "text-yellow-400" : "text-[var(--td-muted)]"
                                               }`}
                                               title={`${value} stars`}
@@ -1302,15 +1416,16 @@ export default function MyDecksPage() {
                                               ★
                                             </button>
                                           ))}
+                                          </div>
+
+                                          <p className="shrink-0 text-[10px] text-[var(--td-muted)] opacity-[0.18]">
+                                            {formatDate(deck.created_at)}
+                                          </p>
                                         </div>
                                       </div>
-                                      <p className="mt-1 text-[11px] text-[var(--td-muted)]">{formatDate(deck.created_at)}</p>
-                                      <p className="mt-2 line-clamp-2 text-base font-medium leading-7 text-[var(--td-text)] sm:leading-6">
-                                        {deck.trigger ? deck.trigger : "（要約なし）"}
-                                      </p>
                                     </div>
 
-                                    <div className="mt-4 flex justify-end">
+                                    <div className="mt-4 flex justify-end opacity-0 transition group-hover:opacity-100">
                                       <button
                                         onClick={(event) => removeDeck(event, key)}
                                         className="rounded-md border border-[var(--td-border-strong)] px-3 py-1.5 text-xs text-[var(--td-muted)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
@@ -1324,9 +1439,11 @@ export default function MyDecksPage() {
                             </div>
                           </div>
                         ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ))
             )}
