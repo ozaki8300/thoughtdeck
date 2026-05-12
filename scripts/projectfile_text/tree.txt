@@ -15,12 +15,15 @@ app/
 ├── mydecks/
 │   └── page.tsx
 ├── page.tsx
+├── thought-connections/
+│   └── page.tsx
 └── thoughtdeck/
     ├── ThoughtDeckClient.tsx
     ├── ThoughtDeckIsland.tsx
     └── page.tsx
 
 lib/
+├── buildConnectionsMd.ts
 ├── buildThoughtDeckMd.ts
 ├── curriculum.ts
 ├── deckParser.ts

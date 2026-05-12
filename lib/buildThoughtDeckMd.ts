@@ -123,6 +123,15 @@ function yamlSafe(value: string) {
     .replace(/"/g, '\\"');
 }
 
+function getTitleFromRaw(raw: string) {
+  const heading = raw
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .find((line) => line.startsWith("# "));
+
+  return heading?.replace(/^#\s+/, "").trim() ?? "";
+}
+
 function lineageValue(value?: string | number | null) {
   if (value === undefined || value === null || value === "") {
     return '""';
@@ -173,6 +182,7 @@ export function buildThoughtDeckMd({
   const deckIdFinal = getDeckId(deckId);
   const now = new Date().toISOString();
   const createdAt = getCreatedAt(deckIdFinal, now);
+  const title = getTitleFromRaw(raw);
   const groupId =
     identity?.groupId ||
     deckIdFinal;
@@ -229,6 +239,7 @@ version: 2
 
 user_id: ${userId}
 deck_id: ${deckIdFinal}
+title: "${yamlSafe(title)}"
 
 group_id: ${yamlSafe(groupId)}
 line_id: ${yamlSafe(lineId)}

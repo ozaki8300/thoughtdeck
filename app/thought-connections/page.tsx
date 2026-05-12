@@ -1,0 +1,425 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  buildConnectionsMd,
+  type ConnectionDeck,
+} from "@/lib/buildConnectionsMd";
+
+declare global {
+  interface Window {
+    showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+  }
+
+  interface FileSystemHandlePermissionDescriptor {
+    mode?: "read" | "readwrite";
+  }
+
+  interface FileSystemDirectoryHandle {
+    values: () => AsyncIterable<FileSystemDirectoryHandle | FileSystemFileHandle>;
+    getDirectoryHandle: (
+      name: string,
+      options?: { create?: boolean },
+    ) => Promise<FileSystemDirectoryHandle>;
+    getFileHandle: (
+      name: string,
+      options?: { create?: boolean },
+    ) => Promise<FileSystemFileHandle>;
+    queryPermission: (
+      descriptor?: FileSystemHandlePermissionDescriptor,
+    ) => Promise<PermissionState>;
+    requestPermission: (
+      descriptor?: FileSystemHandlePermissionDescriptor,
+    ) => Promise<PermissionState>;
+  }
+}
+
+const DB_NAME = "thoughtdeck-vault";
+const STORE_NAME = "settings";
+const HANDLE_KEY = "vaultHandle";
+const CONNECTIONS_DIR = "ThoughtConnections";
+const CONNECTIONS_TITLE = `${CONNECTIONS_DIR}/Thought Connections`;
+const CONNECTIONS_FILE = "Thought Connections.md";
+const IGNORE_FOLDERS = new Set([
+  ".obsidian",
+  ".trash",
+  "_trash",
+  "trash",
+  "attachments",
+  "attachment",
+  "assets",
+  "images",
+  "image",
+]);
+
+function canUseDirectoryPicker() {
+  return (
+    typeof window !== "undefined" &&
+    "showDirectoryPicker" in window
+  );
+}
+
+function isIgnoredFolder(name: string) {
+  if (IGNORE_FOLDERS.has(name.toLowerCase())) {
+    return true;
+  }
+
+  return name.startsWith(".");
+}
+
+function openVaultDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveVaultHandle(
+  handle: FileSystemDirectoryHandle,
+) {
+  const db = await openVaultDB();
+
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+
+    tx.objectStore(STORE_NAME).put(handle, HANDLE_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadVaultHandle() {
+  const db = await openVaultDB();
+
+  return new Promise<FileSystemDirectoryHandle | null>(
+    (resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const request = tx.objectStore(STORE_NAME).get(HANDLE_KEY);
+
+      request.onsuccess = () => {
+        resolve(request.result ?? null);
+      };
+      request.onerror = () => reject(request.error);
+    },
+  );
+}
+
+function readFrontmatter(text: string) {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---/);
+
+  return match?.[1] ?? "";
+}
+
+function unquoteYaml(value: string) {
+  const trimmed = value.trim();
+
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed
+      .slice(1, -1)
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+
+  return trimmed;
+}
+
+function getYamlValue(yaml: string, key: string) {
+  const match = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+
+  return match ? unquoteYaml(match[1]) : "";
+}
+
+function normalizeYamlList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
+function getYamlList(yaml: string, key: string) {
+  const inline = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+
+  if (inline?.[1]?.trim().startsWith("[")) {
+    return normalizeYamlList(
+      inline[1]
+        .trim()
+        .replace(/^\[/, "")
+        .replace(/\]$/, "")
+        .split(",")
+        .map(unquoteYaml),
+    );
+  }
+
+  const block = yaml.match(
+    new RegExp(`^${key}:\\s*\\n([\\s\\S]*?)(?=\\n[a-zA-Z0-9_-]+:|$)`, "m"),
+  );
+
+  if (!block) return [];
+
+  return normalizeYamlList(
+    block[1]
+      .split("\n")
+      .map((line) => line.match(/^  -\s*(.*)$/)?.[1])
+      .filter((value): value is string => value !== undefined)
+      .map(unquoteYaml),
+  );
+}
+
+function titleFromPath(path: string) {
+  const filename = path.split("/").at(-1) ?? path;
+
+  return filename.replace(/\.md$/i, "") || "Untitled Deck";
+}
+
+function parseConnectionDeck(
+  text: string,
+  relativePath: string,
+): ConnectionDeck | null {
+  const yaml = readFrontmatter(text);
+  const format =
+    getYamlValue(yaml, "format") ||
+    getYamlValue(yaml, "type");
+  const deckId = getYamlValue(yaml, "deck_id");
+  const version = getYamlValue(yaml, "version");
+
+  if (format !== "thoughtdeck") return null;
+  if (!deckId || !version) return null;
+
+  return {
+    deck_id: deckId,
+    title:
+      getYamlValue(yaml, "title") ||
+      titleFromPath(relativePath),
+    group_id: getYamlValue(yaml, "group_id"),
+    forked_from_deck_id: getYamlValue(yaml, "forked_from_deck_id"),
+    genre: getYamlValue(yaml, "genre"),
+    subject: getYamlValue(yaml, "subject"),
+    unit: getYamlValue(yaml, "unit"),
+    links: getYamlList(yaml, "links"),
+    triggers: getYamlList(yaml, "trigger"),
+    relativePath,
+  };
+}
+
+async function ensureVaultPermission(
+  handle: FileSystemDirectoryHandle,
+) {
+  const options = { mode: "readwrite" as const };
+  const query = await handle.queryPermission(options);
+
+  if (query === "granted") {
+    return true;
+  }
+
+  const request = await handle.requestPermission(options);
+
+  return request === "granted";
+}
+
+async function writeConnectionsFile(
+  vaultHandle: FileSystemDirectoryHandle,
+  text: string,
+) {
+  const connectionsDir =
+    await vaultHandle.getDirectoryHandle(
+      CONNECTIONS_DIR,
+      { create: true },
+    );
+  const fileHandle =
+    await connectionsDir.getFileHandle(
+      CONNECTIONS_FILE,
+      { create: true },
+    );
+  const writable =
+    await fileHandle.createWritable();
+
+  await writable.write(text);
+  await writable.close();
+}
+
+async function scanDirectory(
+  handle: FileSystemDirectoryHandle,
+  decks: ConnectionDeck[],
+  currentPath = "",
+) {
+  for await (const entry of handle.values()) {
+    if (entry.kind === "file") {
+      if (!entry.name.endsWith(".md")) continue;
+      if (entry.name === CONNECTIONS_FILE) continue;
+
+      const relativePath = currentPath
+        ? `${currentPath}/${entry.name}`
+        : entry.name;
+      const file = await entry.getFile();
+      const parsed = parseConnectionDeck(
+        await file.text(),
+        relativePath,
+      );
+
+      if (parsed) {
+        decks.push(parsed);
+      }
+    }
+
+    if (entry.kind === "directory") {
+      if (isIgnoredFolder(entry.name)) continue;
+
+      const nextPath = currentPath
+        ? `${currentPath}/${entry.name}`
+        : entry.name;
+
+      await scanDirectory(
+        entry as FileSystemDirectoryHandle,
+        decks,
+        nextPath,
+      );
+    }
+  }
+}
+
+export default function ThoughtConnectionsPage() {
+  const [vaultHandle, setVaultHandle] =
+    useState<FileSystemDirectoryHandle | null>(null);
+  const [status, setStatus] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!canUseDirectoryPicker()) return;
+
+    loadVaultHandle()
+      .then((handle) => {
+        if (handle) setVaultHandle(handle);
+      })
+      .catch(() => {
+        setStatus("Vault handle could not be restored.");
+      });
+  }, []);
+
+  const selectVault = async () => {
+    if (!canUseDirectoryPicker()) {
+      setStatus("This browser cannot select a local Obsidian vault.");
+      return;
+    }
+
+    try {
+      const handle = await window.showDirectoryPicker();
+
+      await saveVaultHandle(handle);
+      setVaultHandle(handle);
+      setStatus("Vault selected.");
+    } catch (error) {
+      if ((error as DOMException).name !== "AbortError") {
+        setStatus("Vault selection failed.");
+      }
+    }
+  };
+
+  const generateConnections = async () => {
+    if (!vaultHandle) {
+      setStatus("Select a vault first.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setStatus("Generating connections...");
+
+    try {
+      const granted = await ensureVaultPermission(vaultHandle);
+
+      if (!granted) {
+        setStatus("Vault permission is required.");
+        return;
+      }
+
+      const decks: ConnectionDeck[] = [];
+
+      await scanDirectory(vaultHandle, decks);
+      await writeConnectionsFile(
+        vaultHandle,
+        buildConnectionsMd(decks),
+      );
+
+      const url = `obsidian://open?file=${encodeURIComponent(
+        CONNECTIONS_TITLE,
+      )}`;
+
+      setStatus(`Rebuilt ${CONNECTIONS_FILE} from ${decks.length} decks.`);
+      window.location.href = url;
+    } catch (error) {
+      console.error(error);
+      setStatus("Connection export failed.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <main
+      data-theme="auto"
+      className="min-h-screen bg-[var(--td-bg)] px-5 py-8 text-[var(--td-text)]"
+    >
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-2xl flex-col justify-center">
+        <div className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] p-6 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
+            Knowledge Connection Exporter
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold">
+            Thought Connections
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-[var(--td-text-soft)]">
+            Export your knowledge connections to Obsidian.
+          </p>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={selectVault}
+              className="rounded-lg border border-[var(--td-border-strong)] px-5 py-3 text-sm transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
+            >
+              Select Vault
+            </button>
+            <button
+              type="button"
+              onClick={generateConnections}
+              disabled={!vaultHandle || isGenerating}
+              className="rounded-lg border border-[var(--td-accent-border)] px-5 py-3 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isGenerating ? "Generating..." : "Generate Connections"}
+            </button>
+          </div>
+
+          <div className="mt-6 text-sm leading-7 text-[var(--td-text-soft)]">
+            <p>After saving:</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Open &quot;ThoughtConnections/Thought Connections.md&quot;</li>
+              <li>Press Ctrl + P</li>
+              <li>Search &quot;ローカルグラフ&quot;</li>
+              <li>Open &quot;グラフビュー: ローカルグラフを開く&quot;</li>
+            </ol>
+            <p className="mt-3">
+              This lets you explore connected ideas visually.
+            </p>
+          </div>
+
+          {status && (
+            <p className="mt-5 rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-xs text-[var(--td-muted)]">
+              {status}
+            </p>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
