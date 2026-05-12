@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   buildConnectionsMd,
@@ -290,6 +291,7 @@ async function scanDirectory(
 }
 
 export default function ThoughtConnectionsPage() {
+  const router = useRouter();
   const [vaultHandle, setVaultHandle] =
     useState<FileSystemDirectoryHandle | null>(null);
   const [status, setStatus] = useState("");
@@ -370,7 +372,24 @@ export default function ThoughtConnectionsPage() {
       data-theme="auto"
       className="min-h-screen bg-[var(--td-bg)] px-5 py-8 text-[var(--td-text)]"
     >
-      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-2xl flex-col justify-center">
+      <div className="mx-auto max-w-4xl">
+        <header className="mb-6">
+          <div>
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="font-sans text-xl font-bold text-[var(--td-text)] transition hover:text-[var(--td-accent)]"
+            >
+              Thought Connections
+            </button>
+            <p className="mt-1 font-sans text-sm text-[var(--td-muted)]">
+              Think. Deck. Share.
+            </p>
+          </div>
+        </header>
+      </div>
+
+      <section className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-2xl flex-col justify-center">
         <div className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] p-6 shadow-sm">
           <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
             Knowledge Connection Exporter
