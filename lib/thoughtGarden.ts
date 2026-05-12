@@ -1,0 +1,401 @@
+export const THOUGHT_GARDEN_STORAGE_KEY =
+  "thoughtgarden:seeds:v1";
+
+export type GardenLayer = {
+  id: string;
+  createdAt: string;
+  content: string;
+};
+
+export type GardenSeed = {
+  id: string;
+  title: string;
+  state: "seed" | "growing" | "withered";
+  createdAt: string;
+  lastSeenAt: string;
+  nextReviewAt: string;
+  loopCount: number;
+  star: boolean;
+  layers: GardenLayer[];
+};
+
+function addDays(value: string, days: number) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    date.setTime(Date.now());
+  }
+
+  date.setDate(date.getDate() + days);
+
+  return date.toISOString();
+}
+
+function getNextReviewDate(
+  loopCount: number,
+) {
+  const now = new Date();
+
+  let days = 1;
+
+  if (loopCount >= 4) {
+    days = 30;
+  } else if (loopCount >= 3) {
+    days = 7;
+  } else if (loopCount >= 2) {
+    days = 3;
+  }
+
+  now.setDate(now.getDate() + days);
+
+  return now.toISOString();
+}
+
+function generateSeedTitle(
+  content: string,
+) {
+  const normalized = content.trim().replace(/\s+/g, " ");
+
+  if (!normalized) {
+    return "Untitled Seed";
+  }
+
+  if (normalized.length <= 20) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 20)}…`;
+}
+
+function tokenize(text: string) {
+  return text
+    .toLowerCase()
+    .split(/[\s、。,.!?]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+}
+
+function normalizeLayer(value: Partial<GardenLayer>) {
+  return {
+    id: value.id || crypto.randomUUID(),
+    createdAt: value.createdAt || new Date().toISOString(),
+    content: value.content || "",
+  };
+}
+
+function normalizeSeed(value: Partial<GardenSeed>) {
+  const now = new Date().toISOString();
+  const createdAt = value.createdAt || now;
+  const layers = Array.isArray(value.layers)
+    ? value.layers.map(normalizeLayer)
+    : [];
+
+  return {
+    id: value.id || crypto.randomUUID(),
+    title:
+      value.title ||
+      generateSeedTitle(layers.at(-1)?.content ?? ""),
+    state:
+      value.state === "growing" || value.state === "withered"
+        ? value.state
+        : "seed",
+    createdAt,
+    lastSeenAt: value.lastSeenAt || createdAt,
+    nextReviewAt: value.nextReviewAt || addDays(createdAt, 1),
+    loopCount: value.loopCount ?? 0,
+    star: value.star ?? false,
+    layers,
+  } satisfies GardenSeed;
+}
+
+export function createGardenSeed(
+  title: string,
+  content: string,
+) {
+  const now = new Date().toISOString();
+
+  return {
+    id: crypto.randomUUID(),
+    title:
+      title.trim() ||
+      generateSeedTitle(content),
+    state: "seed",
+    createdAt: now,
+    lastSeenAt: now,
+    nextReviewAt: getNextReviewDate(0),
+    loopCount: 0,
+    star: false,
+    layers: [
+      {
+        id: crypto.randomUUID(),
+        createdAt: now,
+        content: content.trim(),
+      },
+    ],
+  } satisfies GardenSeed;
+}
+
+export function appendGardenLayer(
+  seed: GardenSeed,
+  content: string,
+) {
+  const now = new Date().toISOString();
+  const nextLoopCount = seed.loopCount + 1;
+
+  return {
+    ...seed,
+    state: "growing",
+    lastSeenAt: now,
+    nextReviewAt: getNextReviewDate(nextLoopCount),
+    loopCount: nextLoopCount,
+    layers: [
+      ...seed.layers,
+      {
+        id: crypto.randomUUID(),
+        createdAt: now,
+        content: content.trim(),
+      },
+    ],
+  } satisfies GardenSeed;
+}
+
+export function updateLatestGardenLayer(
+  seed: GardenSeed,
+  content: string,
+) {
+  const latestLayer =
+    seed.layers.at(-1);
+
+  if (!latestLayer) {
+    return seed;
+  }
+
+  return {
+    ...seed,
+    layers: seed.layers.map((layer) =>
+      layer.id === latestLayer.id
+        ? {
+            ...layer,
+            content,
+          }
+        : layer,
+    ),
+  } satisfies GardenSeed;
+}
+
+export function removeLatestGardenLayer(
+  seed: GardenSeed,
+) {
+  if (seed.layers.length <= 1) {
+    return seed;
+  }
+
+  return {
+    ...seed,
+    layers: seed.layers.slice(0, -1),
+  } satisfies GardenSeed;
+}
+
+export function updateGardenSeedTitle(
+  seed: GardenSeed,
+  title: string,
+) {
+  return {
+    ...seed,
+    title:
+      title.trim() ||
+      generateSeedTitle(seed.layers.at(-1)?.content ?? ""),
+  } satisfies GardenSeed;
+}
+
+export function updateGardenSeedState(
+  seed: GardenSeed,
+  state: GardenSeed["state"],
+) {
+  return {
+    ...seed,
+    state,
+    lastSeenAt: new Date().toISOString(),
+    nextReviewAt:
+      state === "growing"
+        ? getNextReviewDate(seed.loopCount + 1)
+        : seed.nextReviewAt,
+  } satisfies GardenSeed;
+}
+
+export function toggleGardenSeedStar(seed: GardenSeed) {
+  return {
+    ...seed,
+    star: !seed.star,
+    lastSeenAt: new Date().toISOString(),
+  } satisfies GardenSeed;
+}
+
+export function revisitGardenSeed(seed: GardenSeed) {
+  const nextLoopCount = seed.loopCount + 1;
+
+  return {
+    ...seed,
+    loopCount: nextLoopCount,
+    lastSeenAt: new Date().toISOString(),
+    nextReviewAt: getNextReviewDate(nextLoopCount),
+  } satisfies GardenSeed;
+}
+
+export function isDormantSeed(
+  seed: GardenSeed,
+) {
+  const lastSeen = new Date(seed.lastSeenAt).getTime();
+
+  if (Number.isNaN(lastSeen)) {
+    return false;
+  }
+
+  const THIRTY_DAYS =
+    1000 * 60 * 60 * 24 * 30;
+
+  return Date.now() - lastSeen >= THIRTY_DAYS;
+}
+
+export function findResonatingSeeds(
+  target: GardenSeed,
+  seeds: GardenSeed[],
+) {
+  const targetText = [
+    target.title,
+    target.layers.at(-1)?.content ?? "",
+  ].join(" ");
+
+  const targetTokens = new Set(
+    tokenize(targetText),
+  );
+
+  return seeds
+    .filter((seed) => seed.id !== target.id)
+    .map((seed) => {
+      const compareText = [
+        seed.title,
+        seed.layers.at(-1)?.content ?? "",
+      ].join(" ");
+
+      const compareTokens = tokenize(compareText);
+
+      const overlap = compareTokens.filter((token) =>
+        targetTokens.has(token),
+      ).length;
+
+      return {
+        seed,
+        overlap,
+      };
+    })
+    .filter((item) => item.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap)
+    .slice(0, 2)
+    .map((item) => item.seed);
+}
+
+export function buildGardenMarkdown(
+  seeds: GardenSeed[],
+) {
+  const lines = ["# Thought Garden", ""];
+
+  seeds.forEach((seed) => {
+    lines.push("## Seed");
+    lines.push("");
+    lines.push(`id: ${seed.id}`);
+    lines.push(`title: ${seed.title}`);
+    lines.push(`state: ${seed.state}`);
+    lines.push(`star: ${seed.star ? "true" : "false"}`);
+    lines.push(`loopCount: ${seed.loopCount}`);
+    lines.push(`updated: ${seed.lastSeenAt}`);
+    lines.push(`nextReviewAt: ${seed.nextReviewAt}`);
+    lines.push("");
+
+    seed.layers.forEach((layer) => {
+      lines.push("### Layer");
+      lines.push("");
+      lines.push(layer.content);
+      lines.push("");
+    });
+  });
+
+  return lines.join("\n").trimEnd() + "\n";
+}
+
+function readGardenMeta(
+  text: string,
+  key: string,
+) {
+  const match = text.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+
+  return match?.[1]?.trim() ?? "";
+}
+
+export function parseGardenMarkdown(
+  markdown: string,
+): GardenSeed[] {
+  const normalized = markdown.replace(/\r\n/g, "\n");
+  const seedBlocks = normalized
+    .split(/^## Seed\s*$/m)
+    .slice(1);
+
+  return seedBlocks
+    .map((block) => {
+      const [metaBlock = "", ...layerBlocks] =
+        block.split(/^### Layer\s*$/m);
+      const updated = readGardenMeta(metaBlock, "updated");
+      const title = readGardenMeta(metaBlock, "title");
+      const layers = layerBlocks
+        .map((layerBlock) => layerBlock.trim())
+        .filter(Boolean)
+        .map((content) => ({
+          id: crypto.randomUUID(),
+          createdAt: updated || new Date().toISOString(),
+          content,
+        }));
+
+      return normalizeSeed({
+        id: readGardenMeta(metaBlock, "id"),
+        title,
+        state: readGardenMeta(metaBlock, "state") as GardenSeed["state"],
+        createdAt: updated || undefined,
+        lastSeenAt: updated || undefined,
+        nextReviewAt:
+          readGardenMeta(metaBlock, "nextReviewAt") || undefined,
+        loopCount:
+          Number(readGardenMeta(metaBlock, "loopCount")) || 0,
+        star: readGardenMeta(metaBlock, "star") === "true",
+        layers,
+      });
+    })
+    .filter((seed) => seed.layers.length > 0);
+}
+
+export function loadGardenSeeds() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const saved = localStorage.getItem(
+      THOUGHT_GARDEN_STORAGE_KEY,
+    );
+    const parsed = JSON.parse(saved || "[]") as Partial<GardenSeed>[];
+
+    return Array.isArray(parsed)
+      ? parsed.map(normalizeSeed)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveGardenSeeds(
+  seeds: GardenSeed[],
+) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(
+    THOUGHT_GARDEN_STORAGE_KEY,
+    JSON.stringify(seeds),
+  );
+}

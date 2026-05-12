@@ -77,6 +77,13 @@ export default function Home() {
           )}
 
           <button
+            onClick={() => router.push("/thought-garden")}
+            className="rounded-lg border border-[var(--td-border-strong)] px-6 py-3 text-sm text-[var(--td-text-soft)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+          >
+            Thought Garden
+          </button>
+
+          <button
             onClick={() => router.push("/thought-connections")}
             className="hidden rounded-lg border border-[var(--td-border-strong)] px-6 py-3 text-sm text-[var(--td-text-soft)] transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)] lg:block"
           >

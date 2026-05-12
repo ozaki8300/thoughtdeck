@@ -17,6 +17,8 @@ app/
 ├── page.tsx
 ├── thought-connections/
 │   └── page.tsx
+├── thought-garden/
+│   └── page.tsx
 └── thoughtdeck/
     ├── ThoughtDeckClient.tsx
     ├── ThoughtDeckIsland.tsx
@@ -32,6 +34,7 @@ lib/
 ├── groupDecksByPath.ts
 ├── shortcutData.ts
 ├── supabase.ts
+├── thoughtGarden.ts
 ├── useCloudSave.ts
 ├── useDeckActions.ts
 ├── useDeckCore.ts
