@@ -545,62 +545,59 @@ export default function ThoughtGardenPage() {
           }
         }}
         tabIndex={0}
-        className="rounded-2xl border border-[var(--td-border)]/70 bg-[var(--td-panel)]/45 p-6 outline-none transition hover:border-[var(--td-border)] hover:bg-[var(--td-hover)]/20 focus:border-[var(--td-accent-border)] md:p-6"
+        className="rounded-2xl border border-[var(--td-card-border)] bg-[var(--td-card-bg)] p-6 outline-none transition hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] md:p-6"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <h2
-            className="min-w-0 flex-1 text-xl font-semibold leading-8 text-sky-300"
-          >
-            {seed.title}
-          </h2>
-          <div
-            onDoubleClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
-            className="flex shrink-0 flex-wrap items-center gap-1 opacity-70 transition hover:opacity-100 sm:justify-end"
-          >
-            <button
-              type="button"
-              aria-label="Edit note"
-              title="Edit note"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleEditor(seed);
-              }}
-              className="grid h-11 w-11 place-items-center rounded-lg border border-[var(--td-border)]/70 bg-[var(--td-bg)]/35 text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-            >
-              ✎
-            </button>
-            <button
-              type="button"
-              aria-label={`Rating ${seed.rating} of 5`}
-              title="Click to cycle rating"
-              onClick={(event) => {
-                event.stopPropagation();
-                cycleSeedRating(seed);
-              }}
-              className="grid h-11 min-w-28 place-items-center rounded-lg border border-[var(--td-border)]/70 bg-[var(--td-bg)]/35 px-3 text-sm tracking-normal text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-            >
-              {ratingLabel(seed.rating)}
-            </button>
-            <button
-              type="button"
-              aria-label="Delete note"
-              title="Delete note"
-              onClick={(event) => {
-                event.stopPropagation();
-                deleteSeed(seed);
-              }}
-              className="grid h-11 w-11 place-items-center rounded-lg border border-[var(--td-border)]/70 bg-[var(--td-bg)]/35 text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-            >
-              🗑
-            </button>
-          </div>
-        </div>
+        <h2 className="min-w-0 text-xl font-semibold leading-8 text-sky-300">
+          {seed.title}
+        </h2>
 
         <p className="mt-6 whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-9 text-[var(--td-text)] sm:text-base sm:leading-9">
           {activeLayerContent(seed)}
         </p>
+
+        <div
+          onDoubleClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          className="mt-5 flex flex-wrap items-center justify-end gap-1 opacity-80 transition hover:opacity-100"
+        >
+          <button
+            type="button"
+            aria-label="Edit note"
+            title="Edit note"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleEditor(seed);
+            }}
+            className="grid h-11 w-11 place-items-center rounded-lg border border-transparent bg-transparent text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            aria-label={`Rating ${seed.rating} of 5`}
+            title="Click to cycle rating"
+            onClick={(event) => {
+              event.stopPropagation();
+              cycleSeedRating(seed);
+            }}
+            className="grid h-11 place-items-center rounded-lg border border-transparent bg-transparent px-2 text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+          >
+            {ratingLabel(seed.rating)}
+          </button>
+          <button
+            type="button"
+            aria-label="Delete note"
+            title="Delete note"
+            onClick={(event) => {
+              event.stopPropagation();
+              deleteSeed(seed);
+            }}
+            className="grid h-11 w-11 place-items-center rounded-lg border border-transparent bg-transparent text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+          >
+            🗑
+          </button>
+        </div>
 
         {isEditing && renderEditorPanel(seed)}
       </article>
