@@ -16,6 +16,7 @@ export type GardenSeed = {
   nextReviewAt: string;
   loopCount: number;
   star: boolean;
+  activeLayerIndex: number;
   layers: GardenLayer[];
 };
 
@@ -57,7 +58,7 @@ function generateSeedTitle(
   const normalized = content.trim().replace(/\s+/g, " ");
 
   if (!normalized) {
-    return "Untitled Seed";
+    return "Untitled Note";
   }
 
   if (normalized.length <= 20) {
@@ -104,6 +105,12 @@ function normalizeSeed(value: Partial<GardenSeed>) {
     nextReviewAt: value.nextReviewAt || addDays(createdAt, 1),
     loopCount: value.loopCount ?? 0,
     star: value.star ?? false,
+    activeLayerIndex:
+      typeof value.activeLayerIndex === "number" &&
+      value.activeLayerIndex >= 0 &&
+      value.activeLayerIndex < layers.length
+        ? value.activeLayerIndex
+        : 0,
     layers,
   } satisfies GardenSeed;
 }
@@ -125,6 +132,7 @@ export function createGardenSeed(
     nextReviewAt: getNextReviewDate(0),
     loopCount: 0,
     star: false,
+    activeLayerIndex: 0,
     layers: [
       {
         id: crypto.randomUUID(),
@@ -148,6 +156,7 @@ export function appendGardenLayer(
     lastSeenAt: now,
     nextReviewAt: getNextReviewDate(nextLoopCount),
     loopCount: nextLoopCount,
+    activeLayerIndex: seed.layers.length,
     layers: [
       ...seed.layers,
       {
@@ -183,6 +192,30 @@ export function updateLatestGardenLayer(
   } satisfies GardenSeed;
 }
 
+export function updateActiveGardenLayer(
+  seed: GardenSeed,
+  content: string,
+) {
+  const activeLayer =
+    seed.layers[seed.activeLayerIndex] ?? seed.layers[0];
+
+  if (!activeLayer) {
+    return seed;
+  }
+
+  return {
+    ...seed,
+    layers: seed.layers.map((layer) =>
+      layer.id === activeLayer.id
+        ? {
+            ...layer,
+            content,
+          }
+        : layer,
+    ),
+  } satisfies GardenSeed;
+}
+
 export function removeLatestGardenLayer(
   seed: GardenSeed,
 ) {
@@ -192,6 +225,10 @@ export function removeLatestGardenLayer(
 
   return {
     ...seed,
+    activeLayerIndex: Math.min(
+      seed.activeLayerIndex,
+      seed.layers.length - 2,
+    ),
     layers: seed.layers.slice(0, -1),
   } satisfies GardenSeed;
 }
@@ -204,7 +241,23 @@ export function updateGardenSeedTitle(
     ...seed,
     title:
       title.trim() ||
-      generateSeedTitle(seed.layers.at(-1)?.content ?? ""),
+      generateSeedTitle(
+        seed.layers[seed.activeLayerIndex]?.content ??
+          seed.layers.at(-1)?.content ??
+          "",
+      ),
+  } satisfies GardenSeed;
+}
+
+export function advanceGardenLayer(seed: GardenSeed) {
+  if (seed.layers.length <= 1) {
+    return seed;
+  }
+
+  return {
+    ...seed,
+    activeLayerIndex:
+      (seed.activeLayerIndex + 1) % seed.layers.length,
   } satisfies GardenSeed;
 }
 
@@ -298,15 +351,16 @@ export function findResonatingSeeds(
 export function buildGardenMarkdown(
   seeds: GardenSeed[],
 ) {
-  const lines = ["# Thought Garden", ""];
+  const lines = ["# Notes", ""];
 
   seeds.forEach((seed) => {
-    lines.push("## Seed");
+    lines.push("## Note");
     lines.push("");
     lines.push(`id: ${seed.id}`);
     lines.push(`title: ${seed.title}`);
     lines.push(`state: ${seed.state}`);
     lines.push(`star: ${seed.star ? "true" : "false"}`);
+    lines.push(`activeLayerIndex: ${seed.activeLayerIndex}`);
     lines.push(`loopCount: ${seed.loopCount}`);
     lines.push(`updated: ${seed.lastSeenAt}`);
     lines.push(`nextReviewAt: ${seed.nextReviewAt}`);
@@ -337,7 +391,7 @@ export function parseGardenMarkdown(
 ): GardenSeed[] {
   const normalized = markdown.replace(/\r\n/g, "\n");
   const seedBlocks = normalized
-    .split(/^## Seed\s*$/m)
+    .split(/^## (?:Seed|Note)\s*$/m)
     .slice(1);
 
   return seedBlocks
@@ -366,6 +420,9 @@ export function parseGardenMarkdown(
         loopCount:
           Number(readGardenMeta(metaBlock, "loopCount")) || 0,
         star: readGardenMeta(metaBlock, "star") === "true",
+        activeLayerIndex:
+          Number(readGardenMeta(metaBlock, "activeLayerIndex")) ||
+          0,
         layers,
       });
     })

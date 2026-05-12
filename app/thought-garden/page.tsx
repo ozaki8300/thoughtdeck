@@ -2,17 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import {
-  Fragment,
   type FormEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
+  advanceGardenLayer,
   appendGardenLayer,
   buildGardenMarkdown,
   createGardenSeed,
-  findResonatingSeeds,
   isDormantSeed,
   loadGardenSeeds,
   parseGardenMarkdown,
@@ -20,9 +20,9 @@ import {
   revisitGardenSeed,
   saveGardenSeeds,
   toggleGardenSeedStar,
+  updateActiveGardenLayer,
   updateGardenSeedState,
   updateGardenSeedTitle,
-  updateLatestGardenLayer,
   type GardenSeed,
 } from "@/lib/thoughtGarden";
 
@@ -30,7 +30,7 @@ const GARDEN_DB_NAME = "thoughtgarden-vault";
 const GARDEN_STORE_NAME = "settings";
 const GARDEN_DIRECTORY_HANDLE_KEY =
   "thoughtgarden:directory-handle";
-const GARDEN_FILE_NAME = "ThoughtGarden.md";
+const GARDEN_FILE_NAME = "Notes.md";
 
 declare global {
   interface Window {
@@ -53,25 +53,6 @@ declare global {
       descriptor?: FileSystemHandlePermissionDescriptor,
     ) => Promise<PermissionState>;
   }
-}
-
-function formatUpdated(value: string) {
-  if (!value) return "-";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function canUseDirectoryPicker() {
@@ -199,16 +180,6 @@ async function readGardenMarkdownFile(
   return file.text();
 }
 
-function previewLayer(seed: GardenSeed) {
-  const latest = seed.layers.at(-1)?.content.trim() ?? "";
-
-  if (latest.length <= 80) {
-    return latest || "No layer yet.";
-  }
-
-  return `${latest.slice(0, 79)}…`;
-}
-
 function pickTodaySeeds(seeds: GardenSeed[]) {
   const activeSeeds = seeds.filter(
     (seed) => seed.state !== "withered",
@@ -278,39 +249,40 @@ function shuffleSeeds(seeds: GardenSeed[]) {
   return shuffled;
 }
 
-function stateBadgeClass(state: GardenSeed["state"]) {
-  if (state === "growing") {
-    return "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] text-[var(--td-accent)]";
-  }
-
-  if (state === "withered") {
-    return "border-[var(--td-border)] bg-[var(--td-surface-soft)] text-[var(--td-muted)]";
-  }
-
-  return "border-[var(--td-border)] bg-[var(--td-bg)] text-[var(--td-text-soft)]";
+function activeLayerContent(seed: GardenSeed) {
+  return (
+    seed.layers[seed.activeLayerIndex]?.content.trim() ||
+    seed.layers[0]?.content.trim() ||
+    "No layer yet."
+  );
 }
+
+type DeepAction = "add-note" | "edit";
 
 export default function ThoughtGardenPage() {
   const router = useRouter();
   const [seeds, setSeeds] = useState<GardenSeed[]>([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [expandedSeedId, setExpandedSeedId] = useState("");
+  const [isNewNoteOpen, setIsNewNoteOpen] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [deepModeSeedId, setDeepModeSeedId] = useState("");
+  const [deepAction, setDeepAction] = useState<{
+    seedId: string;
+    action: DeepAction;
+  } | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  const [showWithered, setShowWithered] = useState(false);
-  const [viewMode, setViewMode] =
-    useState<"garden" | "table">("garden");
   const [isGardenBrowseOpen, setIsGardenBrowseOpen] =
     useState(false);
-  const [editingLayerSeedId, setEditingLayerSeedId] = useState("");
   const [editingLayerContent, setEditingLayerContent] = useState("");
-  const [expandedGrowSeedId, setExpandedGrowSeedId] = useState("");
-  const [resolvedTodaySeedIds, setResolvedTodaySeedIds] = useState<
-    string[]
-  >([]);
-  const [growTextBySeed, setGrowTextBySeed] = useState<
+  const [noteTextBySeed, setNoteTextBySeed] = useState<
     Record<string, string>
   >({});
+  const longPressTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const lastTapAtBySeedRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const loadedSeeds = loadGardenSeeds();
@@ -328,19 +300,13 @@ export default function ThoughtGardenPage() {
   const sortedSeeds = useMemo(
     () =>
       seeds
-        .filter((seed) => showWithered || seed.state !== "withered")
+        .filter((seed) => seed.state !== "withered")
         .sort((a, b) =>
           b.lastSeenAt.localeCompare(a.lastSeenAt),
         ),
-    [seeds, showWithered],
+    [seeds],
   );
-  const todaySeeds = useMemo(
-    () =>
-      pickTodaySeeds(seeds).filter(
-        (seed) => !resolvedTodaySeedIds.includes(seed.id),
-      ),
-    [resolvedTodaySeedIds, seeds],
-  );
+  const todaySeeds = useMemo(() => pickTodaySeeds(seeds), [seeds]);
 
   const createSeed = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -352,62 +318,96 @@ export default function ThoughtGardenPage() {
     const seed = createGardenSeed(title, content);
 
     setSeeds((current) => [seed, ...current]);
-    setExpandedSeedId(seed.id);
-    setExpandedGrowSeedId("");
+    setDeepAction(null);
+    setDeepModeSeedId("");
     setTitle("");
     setContent("");
+    setIsNewNoteOpen(false);
   };
 
-  const openSeed = (seedId: string) => {
-    const isExpanded = expandedSeedId === seedId;
+  const openDeepAction = (seed: GardenSeed, action: DeepAction) => {
+    setDeepModeSeedId(seed.id);
+    setDeepAction((current) =>
+      current?.seedId === seed.id && current.action === action
+        ? null
+        : { seedId: seed.id, action },
+    );
 
-    if (isExpanded) {
-      setExpandedSeedId("");
-      setExpandedGrowSeedId("");
+    if (action === "edit") {
+      startLatestLayerEdit(seed);
+    } else {
+      cancelLatestLayerEdit();
+    }
+  };
+
+  const clearLongPressTimer = () => {
+    if (!longPressTimerRef.current) {
       return;
     }
 
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+
+  const enterDeepMode = (seed: GardenSeed) => {
+    setDeepModeSeedId(seed.id);
+    setDeepAction(null);
+    cancelLatestLayerEdit();
+  };
+
+  const advanceLayer = (seed: GardenSeed) => {
     setSeeds((current) =>
-      current.map((seed) =>
-        seed.id === seedId
-          ? revisitGardenSeed(seed)
-          : seed,
+      current.map((currentSeed) =>
+        currentSeed.id === seed.id
+          ? advanceGardenLayer(currentSeed)
+          : currentSeed,
       ),
     );
-    setExpandedSeedId(seedId);
-    setExpandedGrowSeedId("");
+    setDeepModeSeedId("");
+    setDeepAction(null);
+    cancelLatestLayerEdit();
+  };
+
+  const startLongPress = (seed: GardenSeed) => {
+    clearLongPressTimer();
+    longPressTriggeredRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      enterDeepMode(seed);
+      longPressTimerRef.current = null;
+    }, 520);
   };
 
   const appendLayer = (seed: GardenSeed) => {
-    const growText = growTextBySeed[seed.id]?.trim() ?? "";
+    const noteText = noteTextBySeed[seed.id]?.trim() ?? "";
 
-    if (!growText) {
+    if (!noteText) {
       return;
     }
 
     setSeeds((current) =>
       current.map((currentSeed) =>
         currentSeed.id === seed.id
-          ? appendGardenLayer(currentSeed, growText)
+          ? appendGardenLayer(currentSeed, noteText)
           : currentSeed,
       ),
     );
-    setGrowTextBySeed((current) => ({
+    setNoteTextBySeed((current) => ({
       ...current,
       [seed.id]: "",
     }));
-    setEditingLayerSeedId("");
     setEditingLayerContent("");
-    setExpandedGrowSeedId("");
   };
 
   const startLatestLayerEdit = (seed: GardenSeed) => {
-    setEditingLayerSeedId(seed.id);
-    setEditingLayerContent(seed.layers.at(-1)?.content ?? "");
+    setEditingLayerContent(
+      seed.layers[seed.activeLayerIndex]?.content ??
+        seed.layers[0]?.content ??
+        "",
+    );
   };
 
   const cancelLatestLayerEdit = () => {
-    setEditingLayerSeedId("");
     setEditingLayerContent("");
   };
 
@@ -415,7 +415,7 @@ export default function ThoughtGardenPage() {
     setSeeds((current) =>
       current.map((currentSeed) =>
         currentSeed.id === seed.id
-          ? updateLatestGardenLayer(currentSeed, editingLayerContent)
+          ? updateActiveGardenLayer(currentSeed, editingLayerContent)
           : currentSeed,
       ),
     );
@@ -445,41 +445,6 @@ export default function ThoughtGardenPage() {
     cancelLatestLayerEdit();
   };
 
-  const updateSeedState = (
-    seed: GardenSeed,
-    state: GardenSeed["state"],
-  ) => {
-    setSeeds((current) =>
-      current.map((currentSeed) =>
-        currentSeed.id === seed.id
-          ? updateGardenSeedState(currentSeed, state)
-          : currentSeed,
-      ),
-    );
-  };
-
-  const resolveTodaySeedState = (
-    seed: GardenSeed,
-    state: GardenSeed["state"],
-  ) => {
-    updateSeedState(seed, state);
-    setResolvedTodaySeedIds((current) =>
-      current.includes(seed.id)
-        ? current
-        : [...current, seed.id],
-    );
-  };
-
-  const toggleSeedStar = (seed: GardenSeed) => {
-    setSeeds((current) =>
-      current.map((currentSeed) =>
-        currentSeed.id === seed.id
-          ? toggleGardenSeedStar(currentSeed)
-          : currentSeed,
-      ),
-    );
-  };
-
   const updateSeedTitle = (
     seed: GardenSeed,
     nextTitle: string,
@@ -493,6 +458,46 @@ export default function ThoughtGardenPage() {
     );
   };
 
+  const keepSeed = (seed: GardenSeed) => {
+    setSeeds((current) =>
+      current.map((currentSeed) =>
+        currentSeed.id === seed.id
+          ? revisitGardenSeed(toggleGardenSeedStar(currentSeed))
+          : currentSeed,
+      ),
+    );
+  };
+
+  const witherSeed = (seed: GardenSeed) => {
+    setSeeds((current) =>
+      current.map((currentSeed) =>
+        currentSeed.id === seed.id
+          ? updateGardenSeedState(currentSeed, "withered")
+          : currentSeed,
+      ),
+    );
+    setDeepModeSeedId("");
+    setDeepAction(null);
+  };
+
+  const handleTouchTap = (seed: GardenSeed) => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
+
+    const now = Date.now();
+    const lastTapAt = lastTapAtBySeedRef.current[seed.id] ?? 0;
+
+    if (now - lastTapAt < 320) {
+      lastTapAtBySeedRef.current[seed.id] = 0;
+      advanceLayer(seed);
+      return;
+    }
+
+    lastTapAtBySeedRef.current[seed.id] = now;
+  };
+
   const exportGarden = async () => {
     const markdown = buildGardenMarkdown(seeds);
 
@@ -504,13 +509,13 @@ export default function ThoughtGardenPage() {
       alert(`Saved ${GARDEN_FILE_NAME}.`);
     } catch (error) {
       console.error(error);
-      alert("Could not export Garden.");
+      alert("Could not export Notes.");
     }
   };
 
   const restoreGardenFromMarkdown = async () => {
     const confirmed = window.confirm(
-      "Replace current garden with exported garden?",
+      "Replace current notes with exported notes?",
     );
 
     if (!confirmed) {
@@ -522,14 +527,14 @@ export default function ThoughtGardenPage() {
         await loadGardenDirectoryHandle();
 
       if (!directoryHandle) {
-        alert("Failed to restore garden.");
+        alert("Failed to restore notes.");
         return;
       }
 
       if (
         !(await ensureGardenDirectoryPermission(directoryHandle))
       ) {
-        alert("Failed to restore garden.");
+        alert("Failed to restore notes.");
         return;
       }
 
@@ -538,15 +543,13 @@ export default function ThoughtGardenPage() {
       const parsedSeeds = parseGardenMarkdown(markdown);
 
       setSeeds(parsedSeeds);
-      setResolvedTodaySeedIds([]);
-      setExpandedSeedId("");
-      setExpandedGrowSeedId("");
-      setEditingLayerSeedId("");
+      setDeepAction(null);
+      setDeepModeSeedId("");
       setEditingLayerContent("");
-      alert("Garden restored.");
+      alert("Notes restored.");
     } catch (error) {
       console.error(error);
-      alert("Failed to restore garden.");
+      alert("Failed to restore notes.");
     }
   };
 
@@ -571,199 +574,218 @@ export default function ThoughtGardenPage() {
         return;
       }
 
-      alert("Garden folder updated.");
+      alert("Notes folder updated.");
     } catch (error) {
       console.error(error);
-      alert("Could not update Garden folder.");
+      alert("Could not update Notes folder.");
     }
   };
 
-  const renderExpandedSeed = (seed: GardenSeed) => {
-    const resonatingSeeds =
-      findResonatingSeeds(seed, seeds);
-    const isGrowExpanded = expandedGrowSeedId === seed.id;
-
+  const renderDeepPanel = (seed: GardenSeed, action: DeepAction) => {
     return (
-      <div className="grid gap-5">
-        <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
-          Title
-          <input
-            value={seed.title}
-            onChange={(event) =>
-              updateSeedTitle(seed, event.target.value)
-            }
-            className="rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-sm text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
-          />
-        </label>
-
-        <div className="relative grid gap-4 pl-5 before:absolute before:bottom-3 before:left-1.5 before:top-3 before:w-px before:bg-[var(--td-border)]">
-          {seed.layers.map((layer, index) => (
-            <article
-              key={layer.id}
-              className="relative rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] p-4 before:absolute before:-left-[1.25rem] before:top-5 before:h-2.5 before:w-2.5 before:rounded-full before:border before:border-[var(--td-border)] before:bg-[var(--td-bg)]"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3 pr-20 text-xs leading-6 text-[var(--td-text-soft)] opacity-75 sm:pr-24">
-                <span>Layer {index + 1}</span>
-                <span>{formatUpdated(layer.createdAt)}</span>
-              </div>
-              {index === seed.layers.length - 1 &&
-                editingLayerSeedId !== seed.id && (
-                  <div className="absolute right-3 top-3 flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => startLatestLayerEdit(seed)}
-                      className="rounded-lg border border-[var(--td-border)] px-2 py-1 text-xs text-[var(--td-muted)] opacity-70 transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)] hover:opacity-100"
-                    >
-                      Edit
-                    </button>
-                    {seed.layers.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => deleteLatestLayer(seed)}
-                        className="rounded-lg border border-transparent px-2 py-1 text-xs text-red-300/60 opacity-70 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200 hover:opacity-100"
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                )}
-              {index === seed.layers.length - 1 &&
-              editingLayerSeedId === seed.id ? (
-                <div className="mt-3 grid gap-2">
-                  <textarea
-                    value={editingLayerContent}
-                    onChange={(event) =>
-                      setEditingLayerContent(event.target.value)
-                    }
-                    rows={5}
-                    className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)] sm:leading-6"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveLatestLayerEdit(seed)}
-                      className="rounded-lg border border-[var(--td-accent-border)] px-2.5 py-1.5 text-xs text-[var(--td-accent)] opacity-80 transition hover:bg-[var(--td-hover)] hover:opacity-100 sm:px-3 sm:py-2 sm:text-sm"
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelLatestLayerEdit}
-                      className="rounded-lg border border-[var(--td-border)] px-2.5 py-1.5 text-xs text-[var(--td-muted)] opacity-75 transition hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:opacity-100 sm:px-3 sm:py-2 sm:text-sm"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-8 text-[var(--td-text)] sm:mt-3 sm:leading-7">
-                  {layer.content}
-                </p>
-              )}
-            </article>
-          ))}
-        </div>
-
-        <div className="rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)]/60 p-4">
-          {isGrowExpanded ? (
-            <div>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm text-[var(--td-text-soft)]">
-                  Grow this thought
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setExpandedGrowSeedId("")}
-                  className="rounded-lg border border-[var(--td-border)] px-2 py-1 text-xs text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-                >
-                  Close
-                </button>
-              </div>
-              <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
-                <textarea
-                  value={growTextBySeed[seed.id] ?? ""}
-                  onChange={(event) =>
-                    setGrowTextBySeed((current) => ({
-                      ...current,
-                      [seed.id]: event.target.value,
-                    }))
-                  }
-                  rows={4}
-                  className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)] sm:leading-6"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => appendLayer(seed)}
-                disabled={!growTextBySeed[seed.id]?.trim()}
-                className="mt-3 rounded-lg border border-[var(--td-accent-border)] px-3 py-1.5 text-xs text-[var(--td-accent)] opacity-85 transition hover:bg-[var(--td-hover)] hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Grow
-              </button>
-            </div>
-          ) : (
+      <div className="mt-4 rounded-xl bg-[var(--td-panel)]/35 px-2 py-3">
+        {action === "add-note" && (
+          <div className="grid gap-3">
+            <textarea
+              value={noteTextBySeed[seed.id] ?? ""}
+              onChange={(event) =>
+                setNoteTextBySeed((current) => ({
+                  ...current,
+                  [seed.id]: event.target.value,
+                }))
+              }
+              rows={4}
+              className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)] sm:leading-6"
+            />
             <button
               type="button"
-              onClick={() => setExpandedGrowSeedId(seed.id)}
-              className="text-sm text-[var(--td-text-soft)] transition hover:text-[var(--td-accent)]"
+              onClick={() => appendLayer(seed)}
+              disabled={!noteTextBySeed[seed.id]?.trim()}
+              className="justify-self-start rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              + Grow this thought
-            </button>
-          )}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => toggleSeedStar(seed)}
-              className={`rounded-lg border px-2.5 py-1.5 text-xs opacity-80 transition hover:bg-[var(--td-hover)] hover:opacity-100 sm:px-3 sm:py-2 sm:text-sm ${
-                seed.star
-                  ? "border-[var(--td-accent-border)] text-[var(--td-accent)]"
-                  : "border-[var(--td-border)] text-[var(--td-text-soft)] hover:text-[var(--td-text)]"
-              }`}
-            >
-              ★ Still Thinking
-            </button>
-            <button
-              type="button"
-              onClick={() => updateSeedState(seed, "growing")}
-              className="rounded-lg border border-[var(--td-border)] px-2.5 py-1.5 text-xs text-[var(--td-text-soft)] opacity-80 transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-accent)] hover:opacity-100 sm:px-3 sm:py-2 sm:text-sm"
-            >
-              🌱 Keep Growing
-            </button>
-            <button
-              type="button"
-              onClick={() => updateSeedState(seed, "withered")}
-              className="rounded-lg border border-[var(--td-border)] px-2.5 py-1.5 text-xs text-[var(--td-muted)] opacity-75 transition hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:opacity-100 sm:px-3 sm:py-2 sm:text-sm"
-            >
-              🍂 Wither
+              Add note
             </button>
           </div>
-        </div>
+        )}
 
-        {resonatingSeeds.length > 0 && (
-          <section className="rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
-              Resonating Seeds
-            </p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              {resonatingSeeds.map((resonatingSeed) => (
-                <button
-                  key={resonatingSeed.id}
-                  type="button"
-                  onClick={() => openSeed(resonatingSeed.id)}
-                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] p-3 text-left transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)]"
-                >
-                  <p className="line-clamp-1 text-sm font-medium text-[var(--td-text)]">
-                    {resonatingSeed.title}
-                  </p>
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-[var(--td-text)]">
-                    {previewLayer(resonatingSeed)}
-                  </p>
-                </button>
-              ))}
+        {action === "edit" && (
+          <div className="grid gap-4">
+            <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
+              Title
+              <input
+                value={seed.title}
+                onChange={(event) =>
+                  updateSeedTitle(seed, event.target.value)
+                }
+                className="rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
+              />
+            </label>
+            <textarea
+              value={editingLayerContent}
+              onChange={(event) =>
+                setEditingLayerContent(event.target.value)
+              }
+              rows={6}
+              className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)] sm:leading-6"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => saveLatestLayerEdit(seed)}
+                className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)]"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  cancelLatestLayerEdit();
+                  setDeepAction(null);
+                }}
+                className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-sm text-[var(--td-muted)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+              >
+                Cancel
+              </button>
             </div>
-          </section>
+          </div>
         )}
       </div>
+    );
+  };
+
+  const renderSeedCard = (seed: GardenSeed) => {
+    const activeAction =
+      deepAction?.seedId === seed.id ? deepAction.action : null;
+    const isDeepMode = deepModeSeedId === seed.id;
+
+    return (
+      <article
+        key={seed.id}
+        onDoubleClick={() => advanceLayer(seed)}
+        onPointerDown={(event) => {
+          if (event.pointerType === "touch") {
+            startLongPress(seed);
+          }
+        }}
+        onPointerUp={(event) => {
+          clearLongPressTimer();
+
+          if (event.pointerType === "touch") {
+            handleTouchTap(seed);
+          }
+        }}
+        onPointerCancel={clearLongPressTimer}
+        onPointerLeave={clearLongPressTimer}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            advanceLayer(seed);
+          }
+        }}
+        tabIndex={0}
+        className="rounded-2xl border border-[var(--td-border)]/35 bg-[var(--td-bg)] p-6 outline-none transition hover:border-[var(--td-border)]/50 hover:bg-[var(--td-hover)]/20 focus:border-[var(--td-border)]/60 md:p-5"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2
+            className={`min-w-0 flex-1 text-lg font-semibold leading-8 ${
+              seed.star
+                ? "text-[var(--td-accent)]"
+                : "text-[var(--td-text)]"
+            }`}
+          >
+            {seed.title}
+          </h2>
+          <button
+            type="button"
+            aria-label="Open note actions"
+            title="Open note actions"
+            onClick={(event) => {
+              event.stopPropagation();
+              enterDeepMode(seed);
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--td-border)]/25 bg-[var(--td-bg)]/20 text-sm leading-none text-[var(--td-text-soft)] opacity-45 transition hover:bg-[var(--td-hover)]/25 hover:opacity-75"
+          >
+            ⋯
+          </button>
+        </div>
+
+        <p className="mt-5 whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-9 text-[var(--td-text)] sm:leading-8">
+          {activeLayerContent(seed)}
+        </p>
+
+        {isDeepMode && (
+          <div
+            onDoubleClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            className="mt-4 inline-flex items-center gap-1 rounded-full border border-[var(--td-border)]/20 bg-[var(--td-panel)]/55 p-1 opacity-65 shadow-sm backdrop-blur-sm"
+          >
+            <button
+              type="button"
+              aria-label="Add note"
+              title="Add note"
+              onClick={(event) => {
+                event.stopPropagation();
+                openDeepAction(seed, "add-note");
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full border border-[var(--td-border)]/25 bg-[var(--td-bg)]/20 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]/35 hover:text-[var(--td-text)]"
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              aria-label="Edit current layer"
+              title="Edit current layer"
+              onClick={(event) => {
+                event.stopPropagation();
+                openDeepAction(seed, "edit");
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full border border-[var(--td-border)]/25 bg-[var(--td-bg)]/20 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]/35 hover:text-[var(--td-text)]"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              aria-label="Wither"
+              title="Wither"
+              onClick={(event) => {
+                event.stopPropagation();
+                witherSeed(seed);
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full border border-[var(--td-border)]/25 bg-[var(--td-bg)]/20 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]/35 hover:text-[var(--td-text)] disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              🍂
+            </button>
+            <button
+              type="button"
+              aria-label="Keep"
+              title="Keep"
+              onClick={(event) => {
+                event.stopPropagation();
+                keepSeed(seed);
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full border border-[var(--td-border)]/25 bg-[var(--td-bg)]/20 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]/35 hover:text-[var(--td-text)]"
+            >
+              ✦
+            </button>
+            <button
+              type="button"
+              aria-label="Delete latest layer"
+              title="Delete latest layer"
+              onClick={(event) => {
+                event.stopPropagation();
+                deleteLatestLayer(seed);
+              }}
+              disabled={seed.layers.length <= 1}
+              className="grid h-8 w-8 place-items-center rounded-full border border-[var(--td-border)]/25 bg-[var(--td-bg)]/20 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)]/35 hover:text-[var(--td-text)] disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              🗑
+            </button>
+          </div>
+        )}
+
+        {activeAction && renderDeepPanel(seed, activeAction)}
+      </article>
     );
   };
 
@@ -773,172 +795,129 @@ export default function ThoughtGardenPage() {
       className="min-h-screen bg-[var(--td-bg)] px-4 py-6 text-[var(--td-text)] sm:px-5 sm:py-8"
     >
       <div className="mx-auto max-w-5xl">
-        <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <header className="mb-6 flex items-start justify-between gap-4">
           <div>
             <button
               type="button"
               onClick={() => router.push("/")}
               className="font-sans text-xl font-bold text-[var(--td-text)] transition hover:text-[var(--td-accent)]"
             >
-              Thought Garden
+              Notes
             </button>
-            <p className="mt-1 font-sans text-sm text-[var(--td-text-soft)]">
-              Grow your thoughts.
-            </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="relative">
             <button
               type="button"
-              onClick={exportGarden}
-              className="rounded-lg border border-[var(--td-accent-border)] px-3 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)]"
+              aria-label="Notes menu"
+              title="Notes menu"
+              onClick={() =>
+                setIsHeaderMenuOpen((current) => !current)
+              }
+              className="grid h-10 w-10 place-items-center rounded-full border border-[var(--td-border)] text-xl leading-none text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
             >
-              Export Garden
+              ⋯
             </button>
-            <button
-              type="button"
-              onClick={restoreGardenFromMarkdown}
-              className="rounded-lg border border-[var(--td-border)] px-3 py-2 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-            >
-              Restore Garden
-            </button>
-            <button
-              type="button"
-              onClick={changeGardenFolder}
-              className="rounded-lg border border-[var(--td-border)] px-3 py-2 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-            >
-              Change Folder
-            </button>
+            {isHeaderMenuOpen && (
+              <div className="absolute right-0 top-12 z-20 grid min-w-40 gap-1 rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] p-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMenuOpen(false);
+                    exportGarden();
+                  }}
+                  className="rounded-lg px-3 py-2 text-left text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                >
+                  ⬆ Export
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMenuOpen(false);
+                    restoreGardenFromMarkdown();
+                  }}
+                  className="rounded-lg px-3 py-2 text-left text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                >
+                  ↺ Restore
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMenuOpen(false);
+                    changeGardenFolder();
+                  }}
+                  className="rounded-lg px-3 py-2 text-left text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                >
+                  📁 Folder
+                </button>
+              </div>
+            )}
           </div>
         </header>
 
         <div className="grid gap-7 lg:grid-cols-[minmax(18rem,22rem)_1fr]">
-          <section className="order-2 rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] p-5 shadow-sm lg:order-1">
-            <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
-              New Seed
-            </p>
-            <h1 className="mt-3 text-2xl font-semibold">
-              Leave a thought lightly.
-            </h1>
-
-            <form onSubmit={createSeed} className="mt-5 grid gap-4">
-              <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
-                <span>
-                  Title
-                  <span className="ml-2 text-xs text-[var(--td-muted)]">
-                    Optional
-                  </span>
-                </span>
-                <input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
-                />
-              </label>
-
-              <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
-                Content
-                <textarea
-                  value={content}
-                  onChange={(event) => setContent(event.target.value)}
-                  rows={6}
-                  className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm leading-6 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
-                />
-              </label>
-
+          <section className="order-2 rounded-2xl border border-[var(--td-border)]/70 bg-[var(--td-panel)] p-5 lg:order-1">
+            {!isNewNoteOpen ? (
               <button
-                type="submit"
-                disabled={!content.trim()}
-                className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2.5 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={() => setIsNewNoteOpen(true)}
+                className="w-full rounded-xl border border-[var(--td-accent-border)] px-4 py-3 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)]"
               >
-                Plant Seed
+                ＋ New note
               </button>
-            </form>
+            ) : (
+              <form onSubmit={createSeed} className="grid gap-4">
+                <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
+                  Title
+                  <input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    className="rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
+                  <textarea
+                    value={content}
+                    onChange={(event) =>
+                      setContent(event.target.value)
+                    }
+                    rows={6}
+                    className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
+                  />
+                </label>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    disabled={!content.trim()}
+                    className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsNewNoteOpen(false)}
+                    className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-sm text-[var(--td-muted)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
 
           <div className="order-1 grid gap-7 lg:order-2 lg:gap-6">
-            <section className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] p-5 shadow-sm sm:p-5">
+            <section className="rounded-2xl border border-[var(--td-border)]/70 bg-[var(--td-panel)] p-5 sm:p-5">
               <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
-                Today’s Seeds
-              </p>
-              <p className="mt-2 text-sm text-[var(--td-text-soft)]">
-                Revisit thoughts that may still grow.
+                Recent Notes
               </p>
 
               <div className="mt-5 grid gap-4 md:mt-4 md:grid-cols-3 md:gap-3">
-                {todaySeeds.map((seed) => (
-                  <article
-                    key={seed.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openSeed(seed.id)}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" ||
-                        event.key === " "
-                      ) {
-                        event.preventDefault();
-                        openSeed(seed.id);
-                      }
-                    }}
-                    className="rounded-xl border border-[var(--td-border)] bg-[var(--td-bg)] p-5 text-left transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] md:p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="line-clamp-2 text-sm font-medium text-[var(--td-text)]">
-                        {seed.star && (
-                          <span className="mr-1 text-[var(--td-accent)]">
-                            ★
-                          </span>
-                        )}
-                        {seed.title}
-                      </p>
-                      {seed.state === "growing" && (
-                        <span className="rounded-full border border-[var(--td-accent-border)] bg-[var(--td-accent-bg)] px-2 py-0.5 text-[10px] text-[var(--td-accent)]">
-                          still growing
-                        </span>
-                      )}
-                    </div>
-                    {isDormantSeed(seed) && seed.state !== "withered" && (
-                      <p className="mt-1 text-xs text-[var(--td-muted)]">
-                        Long time no revisit.
-                      </p>
-                    )}
-                    <p className="mt-4 line-clamp-4 text-sm leading-7 text-[var(--td-text)] md:mt-3 md:line-clamp-3 md:leading-6">
-                      {previewLayer(seed)}
-                    </p>
-                    <p className="mt-4 text-xs leading-5 text-[var(--td-text-soft)] opacity-70 md:mt-3">
-                      {formatUpdated(seed.lastSeenAt)}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-[var(--td-text-soft)] opacity-70">
-                      Next review: {formatUpdated(seed.nextReviewAt)}
-                    </p>
-                    <div className="mt-5 flex flex-wrap gap-2 md:mt-4">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          resolveTodaySeedState(seed, "growing");
-                        }}
-                        className="rounded-lg border border-[var(--td-border)] px-2.5 py-1 text-xs text-[var(--td-text-soft)] opacity-75 transition hover:border-[var(--td-accent-border)] hover:bg-[var(--td-hover)] hover:text-[var(--td-accent)] hover:opacity-100"
-                      >
-                        🌱 Keep
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          resolveTodaySeedState(seed, "withered");
-                        }}
-                        className="rounded-lg border border-[var(--td-border)] px-2.5 py-1 text-xs text-[var(--td-muted)] opacity-70 transition hover:border-[var(--td-border-strong)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text-soft)] hover:opacity-100"
-                      >
-                        🍂 Wither
-                      </button>
-                    </div>
-                  </article>
-                ))}
+                {todaySeeds.map((seed) => renderSeedCard(seed))}
 
                 {todaySeeds.length === 0 && (
                   <p className="text-sm text-[var(--td-muted)]">
-                    Plant a seed to begin the loop.
+                    New note to begin.
                   </p>
                 )}
               </div>
@@ -950,222 +929,31 @@ export default function ThoughtGardenPage() {
                 className="mt-5 w-full rounded-xl border border-[var(--td-border)] px-4 py-3 text-sm text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)] lg:hidden"
               >
                 {isGardenBrowseOpen
-                  ? "Close Garden"
-                  : "Browse Garden"}
+                  ? "Close notes"
+                  : "All notes"}
               </button>
             </section>
 
             <section
-              className={`overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] shadow-sm ${
+              className={`overflow-hidden rounded-2xl border border-[var(--td-border)]/70 bg-[var(--td-panel)] ${
                 isGardenBrowseOpen ? "block" : "hidden"
               } lg:block`}
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--td-border)] px-5 py-4">
+              <div className="border-b border-[var(--td-border)] px-5 py-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
-                  Seeds
+                  Notes
                 </p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] p-0.5">
-                    {(["garden", "table"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setViewMode(mode)}
-                        className={`rounded-md px-3 py-1.5 text-xs transition ${
-                          viewMode === mode
-                            ? "bg-[var(--td-accent-bg)] text-[var(--td-accent)]"
-                            : "text-[var(--td-muted)] hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-                        }`}
-                      >
-                        {mode === "garden" ? "Garden" : "Table"}
-                      </button>
-                    ))}
-                  </div>
-                  <label className="flex items-center gap-2 text-xs text-[var(--td-muted)] opacity-70 lg:opacity-100">
-                    <input
-                      type="checkbox"
-                      checked={showWithered}
-                      onChange={(event) =>
-                        setShowWithered(event.target.checked)
-                      }
-                      className="h-3.5 w-3.5 accent-[var(--td-accent)]"
-                    />
-                    Show Withered
-                  </label>
-                </div>
               </div>
 
-              {viewMode === "garden" ? (
-                <div className="grid gap-5 p-4 sm:p-5">
-                  {sortedSeeds.map((seed) => {
-                    const expanded = expandedSeedId === seed.id;
-                    const dormant =
-                      isDormantSeed(seed) &&
-                      seed.state !== "withered";
-                    const resonatingSeed =
-                      findResonatingSeeds(seed, seeds)[0];
+              <div className="grid gap-5 p-4 sm:p-5">
+                {sortedSeeds.map((seed) => renderSeedCard(seed))}
 
-                    return (
-                      <article key={seed.id} className="grid gap-3">
-                        <button
-                          type="button"
-                          onClick={() => openSeed(seed.id)}
-                          className={`rounded-2xl border bg-[var(--td-bg)] p-5 text-left transition hover:bg-[var(--td-hover)] md:p-4 ${
-                            seed.state === "growing"
-                              ? "border-[var(--td-accent-border)]"
-                              : "border-[var(--td-border)]"
-                          } ${dormant ? "opacity-80" : ""}`}
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            {seed.star && (
-                              <span className="text-sm text-[var(--td-accent)]">
-                                ★
-                              </span>
-                            )}
-                            <p
-                              className={`line-clamp-2 text-base font-medium ${
-                                seed.star
-                                  ? "text-[var(--td-accent)]"
-                                  : "text-[var(--td-text)]"
-                              }`}
-                            >
-                              {seed.title}
-                            </p>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs leading-5 opacity-75 md:mt-3">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-0.5 ${stateBadgeClass(seed.state)}`}
-                            >
-                              {seed.state}
-                            </span>
-                            {dormant && (
-                              <span className="inline-flex rounded-full border border-[var(--td-border)] bg-[var(--td-surface-soft)] px-2 py-0.5 text-[var(--td-muted)]">
-                                🌙 dormant
-                              </span>
-                            )}
-                            <span className="text-[var(--td-text-soft)]">
-                              {seed.layers.length} layers
-                            </span>
-                            <span className="text-[var(--td-text-soft)]">
-                              Next review {formatUpdated(seed.nextReviewAt)}
-                            </span>
-                          </div>
-
-                          <p className="mt-4 line-clamp-4 text-sm leading-7 text-[var(--td-text)] md:mt-3 md:line-clamp-3 md:leading-6">
-                            {previewLayer(seed)}
-                          </p>
-
-                          {resonatingSeed && (
-                            <p className="mt-4 text-xs leading-5 text-[var(--td-muted)] opacity-75 md:mt-3">
-                              Resonates with:{" "}
-                              <span className="text-[var(--td-text)]">
-                                {resonatingSeed.title}
-                              </span>
-                            </p>
-                          )}
-                        </button>
-
-                        {expanded && (
-                          <div className="rounded-2xl border border-[var(--td-border)] bg-[var(--td-bg)] p-4 sm:p-5">
-                            {renderExpandedSeed(seed)}
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-
-                  {sortedSeeds.length === 0 && (
-                    <p className="py-8 text-center text-sm text-[var(--td-muted)]">
-                      No seeds yet.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-              <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
-                <thead className="bg-[var(--td-surface-soft)] text-[var(--td-muted)]">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">★</th>
-                    <th className="px-5 py-3 font-medium">state</th>
-                    <th className="px-5 py-3 font-medium">title</th>
-                    <th className="px-5 py-3 font-medium">layers</th>
-                    <th className="px-5 py-3 font-medium">updated</th>
-                    <th className="px-5 py-3 font-medium">next review</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedSeeds.map((seed) => {
-                    const expanded = expandedSeedId === seed.id;
-                    const dormant =
-                      isDormantSeed(seed) &&
-                      seed.state !== "withered";
-
-                    return (
-                      <Fragment key={seed.id}>
-                        <tr
-                          onClick={() => openSeed(seed.id)}
-                          className={`cursor-pointer border-t border-[var(--td-border)] transition hover:bg-[var(--td-hover)] ${
-                            dormant ? "opacity-80" : ""
-                          }`}
-                        >
-                          <td className="px-5 py-4 text-[var(--td-accent)]">
-                            {seed.star ? "★" : ""}
-                          </td>
-                          <td className="px-5 py-4">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${stateBadgeClass(seed.state)}`}
-                            >
-                              {seed.state}
-                            </span>
-                            {dormant && (
-                              <span className="ml-2 inline-flex rounded-full border border-[var(--td-border)] bg-[var(--td-surface-soft)] px-2 py-0.5 text-xs text-[var(--td-muted)]">
-                                🌙 dormant
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-4 font-medium text-[var(--td-text)]">
-                            {seed.title}
-                          </td>
-                          <td className="px-5 py-4 text-[var(--td-text-soft)]">
-                            {seed.layers.length}
-                          </td>
-                          <td className="px-5 py-4 text-[var(--td-text-soft)]">
-                            {formatUpdated(seed.lastSeenAt)}
-                          </td>
-                          <td className="px-5 py-4 text-[var(--td-text-soft)]">
-                            {formatUpdated(seed.nextReviewAt)}
-                          </td>
-                        </tr>
-
-                        {expanded && (
-                          <tr>
-                            <td
-                              colSpan={6}
-                              className="border-t border-[var(--td-border)] bg-[var(--td-bg)] px-5 py-5"
-                            >
-                              {renderExpandedSeed(seed)}
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-
-                  {sortedSeeds.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-5 py-10 text-center text-sm text-[var(--td-muted)]"
-                      >
-                        No seeds yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-                </div>
-              )}
+                {sortedSeeds.length === 0 && (
+                  <p className="py-8 text-center text-sm text-[var(--td-muted)]">
+                    No notes yet.
+                  </p>
+                )}
+              </div>
             </section>
           </div>
         </div>
