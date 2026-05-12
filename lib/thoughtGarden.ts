@@ -15,7 +15,7 @@ export type GardenSeed = {
   lastSeenAt: string;
   nextReviewAt: string;
   loopCount: number;
-  star: boolean;
+  rating: number;
   activeLayerIndex: number;
   layers: GardenLayer[];
 };
@@ -104,7 +104,12 @@ function normalizeSeed(value: Partial<GardenSeed>) {
     lastSeenAt: value.lastSeenAt || createdAt,
     nextReviewAt: value.nextReviewAt || addDays(createdAt, 1),
     loopCount: value.loopCount ?? 0,
-    star: value.star ?? false,
+    rating:
+      typeof value.rating === "number"
+        ? Math.min(5, Math.max(0, Math.round(value.rating)))
+        : (value as Partial<GardenSeed> & { star?: boolean }).star
+          ? 5
+          : 0,
     activeLayerIndex:
       typeof value.activeLayerIndex === "number" &&
       value.activeLayerIndex >= 0 &&
@@ -131,7 +136,7 @@ export function createGardenSeed(
     lastSeenAt: now,
     nextReviewAt: getNextReviewDate(0),
     loopCount: 0,
-    star: false,
+    rating: 0,
     activeLayerIndex: 0,
     layers: [
       {
@@ -205,6 +210,7 @@ export function updateActiveGardenLayer(
 
   return {
     ...seed,
+    lastSeenAt: new Date().toISOString(),
     layers: seed.layers.map((layer) =>
       layer.id === activeLayer.id
         ? {
@@ -239,6 +245,7 @@ export function updateGardenSeedTitle(
 ) {
   return {
     ...seed,
+    lastSeenAt: new Date().toISOString(),
     title:
       title.trim() ||
       generateSeedTitle(
@@ -276,10 +283,13 @@ export function updateGardenSeedState(
   } satisfies GardenSeed;
 }
 
-export function toggleGardenSeedStar(seed: GardenSeed) {
+export function updateGardenSeedRating(
+  seed: GardenSeed,
+  rating: number,
+) {
   return {
     ...seed,
-    star: !seed.star,
+    rating: Math.min(5, Math.max(0, Math.round(rating))),
     lastSeenAt: new Date().toISOString(),
   } satisfies GardenSeed;
 }
@@ -359,7 +369,7 @@ export function buildGardenMarkdown(
     lines.push(`id: ${seed.id}`);
     lines.push(`title: ${seed.title}`);
     lines.push(`state: ${seed.state}`);
-    lines.push(`star: ${seed.star ? "true" : "false"}`);
+    lines.push(`rating: ${seed.rating}`);
     lines.push(`activeLayerIndex: ${seed.activeLayerIndex}`);
     lines.push(`loopCount: ${seed.loopCount}`);
     lines.push(`updated: ${seed.lastSeenAt}`);
@@ -419,7 +429,9 @@ export function parseGardenMarkdown(
           readGardenMeta(metaBlock, "nextReviewAt") || undefined,
         loopCount:
           Number(readGardenMeta(metaBlock, "loopCount")) || 0,
-        star: readGardenMeta(metaBlock, "star") === "true",
+        rating:
+          Number(readGardenMeta(metaBlock, "rating")) ||
+          (readGardenMeta(metaBlock, "star") === "true" ? 5 : 0),
         activeLayerIndex:
           Number(readGardenMeta(metaBlock, "activeLayerIndex")) ||
           0,
