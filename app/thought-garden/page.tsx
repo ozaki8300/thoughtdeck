@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
   useRef,
@@ -201,7 +202,20 @@ export default function ThoughtGardenPage() {
   const [noteTextBySeed, setNoteTextBySeed] = useState<
     Record<string, string>
   >({});
-  const lastTapAtBySeedRef = useRef<Record<string, number>>({});
+  const [expandedSeedIds, setExpandedSeedIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [transitioningSeedIds, setTransitioningSeedIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [transitionDirectionBySeed, setTransitionDirectionBySeed] =
+    useState<Record<string, -1 | 1>>({});
+  const swipeStartBySeedRef = useRef<
+    Record<string, { x: number; y: number; pointerId: number }>
+  >({});
+  const suppressCardClickUntilBySeedRef = useRef<Record<string, number>>(
+    {},
+  );
 
   useEffect(() => {
     const loadedSeeds = loadGardenSeeds();
@@ -244,14 +258,54 @@ export default function ThoughtGardenPage() {
     setIsNewNoteOpen(false);
   };
 
-  const advanceLayer = (seed: GardenSeed) => {
-    setSeeds((current) =>
-      current.map((currentSeed) =>
-        currentSeed.id === seed.id
-          ? advanceGardenLayer(currentSeed)
-          : currentSeed,
-      ),
-    );
+  const toggleSeedExpanded = (seed: GardenSeed) => {
+    setExpandedSeedIds((current) => ({
+      ...current,
+      [seed.id]: !current[seed.id],
+    }));
+  };
+
+  const cycleVisibleNote = (seed: GardenSeed, direction: -1 | 1) => {
+    if (seed.layers.length <= 1) {
+      return;
+    }
+
+    setTransitioningSeedIds((current) => ({
+      ...current,
+      [seed.id]: true,
+    }));
+    setTransitionDirectionBySeed((current) => ({
+      ...current,
+      [seed.id]: direction,
+    }));
+
+    window.setTimeout(() => {
+      setSeeds((current) =>
+        current.map((currentSeed) =>
+          currentSeed.id === seed.id
+            ? currentSeed.layers.length <= 1
+              ? currentSeed
+              : direction === 1
+              ? advanceGardenLayer(currentSeed)
+              : {
+                  ...currentSeed,
+                  activeLayerIndex:
+                    (currentSeed.activeLayerIndex -
+                      1 +
+                      currentSeed.layers.length) %
+                    currentSeed.layers.length,
+                }
+            : currentSeed,
+        ),
+      );
+
+      window.setTimeout(() => {
+        setTransitioningSeedIds((current) => ({
+          ...current,
+          [seed.id]: false,
+        }));
+      }, 120);
+    }, 90);
   };
 
   const appendLayer = (seed: GardenSeed) => {
@@ -353,17 +407,42 @@ export default function ThoughtGardenPage() {
     });
   };
 
-  const handleTouchTap = (seed: GardenSeed) => {
-    const now = Date.now();
-    const lastTapAt = lastTapAtBySeedRef.current[seed.id] ?? 0;
+  const captureSwipeStart = (
+    seed: GardenSeed,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    swipeStartBySeedRef.current[seed.id] = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+    };
+  };
 
-    if (now - lastTapAt < 320) {
-      lastTapAtBySeedRef.current[seed.id] = 0;
-      advanceLayer(seed);
+  const finishSwipe = (
+    seed: GardenSeed,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    const start = swipeStartBySeedRef.current[seed.id];
+
+    delete swipeStartBySeedRef.current[seed.id];
+
+    if (!start || start.pointerId !== event.pointerId) {
       return;
     }
 
-    lastTapAtBySeedRef.current[seed.id] = now;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    const isIntentionalHorizontalSwipe =
+      Math.abs(deltaX) >= 64 &&
+      Math.abs(deltaX) > Math.abs(deltaY) * 1.35;
+
+    if (!isIntentionalHorizontalSwipe) {
+      return;
+    }
+
+    suppressCardClickUntilBySeedRef.current[seed.id] =
+      Date.now() + 500;
+    cycleVisibleNote(seed, deltaX < 0 ? 1 : -1);
   };
 
   const exportGarden = async () => {
@@ -451,7 +530,7 @@ export default function ThoughtGardenPage() {
   const renderEditorPanel = (seed: GardenSeed) => {
     return (
       <div
-        onDoubleClick={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         onPointerUp={(event) => event.stopPropagation()}
         className="mt-5 grid gap-5 rounded-xl border border-[var(--td-border)]/70 bg-[var(--td-panel)]/55 p-4"
@@ -529,37 +608,83 @@ export default function ThoughtGardenPage() {
 
   const renderSeedCard = (seed: GardenSeed) => {
     const isEditing = editingSeedId === seed.id;
+    const isExpanded = expandedSeedIds[seed.id] ?? false;
+    const isTransitioning =
+      transitioningSeedIds[seed.id] ?? false;
+    const activeLayerIndex = Math.min(
+      seed.activeLayerIndex,
+      Math.max(seed.layers.length - 1, 0),
+    );
 
     return (
       <article
         key={seed.id}
-        onDoubleClick={() => advanceLayer(seed)}
-        onPointerUp={(event) => {
-          if (event.pointerType === "touch") {
-            handleTouchTap(seed);
+        onClick={(event) => {
+          if (
+            Date.now() <
+            (suppressCardClickUntilBySeedRef.current[seed.id] ?? 0)
+          ) {
+            return;
           }
+
+          toggleSeedExpanded(seed);
+        }}
+        onPointerDown={(event) => captureSwipeStart(seed, event)}
+        onPointerUp={(event) => {
+          finishSwipe(seed, event);
+        }}
+        onPointerCancel={() => {
+          delete swipeStartBySeedRef.current[seed.id];
         }}
         onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            advanceLayer(seed);
+          if (event.key === "ArrowLeft") {
+            cycleVisibleNote(seed, -1);
+          }
+
+          if (event.key === "ArrowRight") {
+            cycleVisibleNote(seed, 1);
+          }
+
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleSeedExpanded(seed);
           }
         }}
         tabIndex={0}
-        className="rounded-2xl border border-[var(--td-card-border)] bg-[var(--td-card-bg)] p-6 outline-none transition hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] sm:p-7"
+        className="touch-pan-y rounded-2xl border border-[var(--td-card-border)] bg-[var(--td-card-bg)] p-6 outline-none transition hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] sm:p-7"
       >
         <h2 className="min-w-0 text-xl font-semibold leading-8 text-sky-300">
           {seed.title}
         </h2>
 
-        <p className="mt-6 whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-9 text-[var(--td-text)] sm:text-base sm:leading-9">
-          {activeLayerContent(seed)}
-        </p>
+        <div
+          className={[
+            "relative mt-6 overflow-hidden transition-[max-height] duration-300 ease-out",
+            isExpanded ? "max-h-[42rem]" : "max-h-40 sm:max-h-44",
+          ].join(" ")}
+        >
+          <p
+            className={[
+              "whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-8 text-[var(--td-text)] transition duration-200 ease-out sm:text-base sm:leading-8",
+              isTransitioning
+                ? transitionDirectionBySeed[seed.id] === 1
+                  ? "-translate-x-2 opacity-35"
+                  : "translate-x-2 opacity-35"
+                : "translate-x-0 opacity-100",
+            ].join(" ")}
+          >
+            {activeLayerContent(seed)}
+          </p>
+          {!isExpanded && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[var(--td-card-bg)] via-[var(--td-card-bg)]/95 to-transparent" />
+          )}
+        </div>
 
         <div
-          onDoubleClick={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
-          className="mt-6 flex flex-wrap items-center justify-end gap-1 opacity-80 transition hover:opacity-100"
+          className="mt-6 flex flex-wrap items-center justify-end gap-3 opacity-55 transition hover:opacity-90"
         >
           <button
             type="button"
@@ -569,7 +694,7 @@ export default function ThoughtGardenPage() {
               event.stopPropagation();
               toggleEditor(seed);
             }}
-            className="grid h-11 w-11 place-items-center rounded-lg bg-transparent text-base text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
+            className="grid h-11 w-11 place-items-center rounded-lg bg-transparent text-sm text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
           >
             ✎
           </button>
@@ -581,7 +706,7 @@ export default function ThoughtGardenPage() {
               event.stopPropagation();
               cycleSeedRating(seed);
             }}
-            className="grid h-11 place-items-center rounded-lg bg-transparent px-2 text-base text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
+            className="grid h-11 place-items-center rounded-lg bg-transparent px-2 text-sm text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
           >
             {ratingLabel(seed.rating)}
           </button>
@@ -593,11 +718,33 @@ export default function ThoughtGardenPage() {
               event.stopPropagation();
               deleteSeed(seed);
             }}
-            className="grid h-11 w-11 place-items-center rounded-lg bg-transparent text-base text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
+            className="grid h-11 w-11 place-items-center rounded-lg bg-transparent text-sm text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
           >
             🗑
           </button>
         </div>
+
+        {seed.layers.length > 1 && (
+          <div
+            aria-label={`Viewing note ${activeLayerIndex + 1} of ${seed.layers.length}`}
+            className="mt-2 flex justify-end"
+          >
+            <div className="flex items-center gap-1.5 pr-1 text-[9px] leading-none text-[var(--td-muted)] opacity-55">
+              {seed.layers.map((layer, index) => (
+                <span
+                  key={layer.id}
+                  aria-hidden="true"
+                  className={[
+                    "inline-block h-1.5 w-1.5 rounded-full transition duration-200",
+                    index === activeLayerIndex
+                      ? "bg-current opacity-100"
+                      : "border border-current opacity-55",
+                  ].join(" ")}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {isEditing && renderEditorPanel(seed)}
       </article>
@@ -607,10 +754,10 @@ export default function ThoughtGardenPage() {
   return (
     <main
       data-theme="auto"
-      className="min-h-screen bg-[var(--td-bg)] px-3 py-6 text-[var(--td-text)] sm:px-4 sm:py-9"
+      className="min-h-screen bg-[var(--td-bg)] px-3 pb-28 pt-4 text-[var(--td-text)] sm:px-4 sm:pb-32 sm:pt-5"
     >
       <div className="mx-auto max-w-5xl">
-        <header className="mb-6 flex items-start justify-between gap-4">
+        <header className="sticky top-3 z-30 mb-7 flex items-center justify-between gap-4 rounded-2xl bg-[var(--td-bg)]/78 px-4 py-3 backdrop-blur-md sm:top-4 sm:mb-8">
           <div>
             <button
               type="button"
@@ -669,77 +816,78 @@ export default function ThoughtGardenPage() {
           </div>
         </header>
 
-        <div className="grid gap-7 lg:grid-cols-[minmax(18rem,22rem)_1fr]">
-          <section className="order-2 rounded-2xl border border-[var(--td-border)]/70 bg-[var(--td-panel)] p-5 lg:order-1">
-            {!isNewNoteOpen ? (
-              <button
-                type="button"
-                onClick={() => setIsNewNoteOpen(true)}
-                className="w-full rounded-xl border border-[var(--td-accent-border)] px-4 py-3 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)]"
-              >
-                ＋ New Note
-              </button>
-            ) : (
-              <form onSubmit={createSeed} className="grid gap-4">
-                <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
-                  Title
-                  <input
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    className="rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
-                  />
-                </label>
+        <div>
+          <div className="grid gap-7 sm:gap-8">
+            {sortedSeeds.map((seed) => renderSeedCard(seed))}
 
-                <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
-                  <textarea
-                    value={content}
-                    onChange={(event) =>
-                      setContent(event.target.value)
-                    }
-                    rows={6}
-                    className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
-                  />
-                </label>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    disabled={!content.trim()}
-                    className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsNewNoteOpen(false)}
-                    className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-sm text-[var(--td-muted)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-          </section>
-
-          <div className="order-1 lg:order-2">
-            <div className="mb-5 px-1 sm:mb-6">
-              <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
-                Notes
+            {sortedSeeds.length === 0 && (
+              <p className="py-8 text-center text-sm text-[var(--td-muted)]">
+                No notes yet.
               </p>
-            </div>
-
-            <div className="grid gap-7 sm:gap-8">
-              {sortedSeeds.map((seed) => renderSeedCard(seed))}
-
-              {sortedSeeds.length === 0 && (
-                <p className="py-8 text-center text-sm text-[var(--td-muted)]">
-                  No notes yet.
-                </p>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        aria-label="New note"
+        title="New note"
+        onClick={() => setIsNewNoteOpen(true)}
+        className="fixed bottom-5 right-4 z-30 grid h-12 w-12 place-items-center rounded-full border border-[var(--td-accent-border)] bg-[var(--td-panel)]/88 text-2xl font-light leading-none text-[var(--td-accent)] opacity-90 shadow-md shadow-black/20 backdrop-blur transition hover:bg-[var(--td-hover)] hover:opacity-100 sm:bottom-7 sm:right-7"
+      >
+        +
+      </button>
+
+      {isNewNoteOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/35 px-3 pb-3 pt-16 backdrop-blur-[2px] sm:items-center sm:px-4 sm:pb-4"
+          onClick={() => setIsNewNoteOpen(false)}
+        >
+          <section
+            aria-label="New note"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-xl rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] p-5 shadow-2xl sm:p-6"
+          >
+            <form onSubmit={createSeed} className="grid gap-4">
+              <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
+                Title
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-2 text-sm text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
+                <textarea
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  rows={7}
+                  className="resize-y rounded-lg border border-[var(--td-border)] bg-[var(--td-bg)] px-3 py-3 text-sm leading-7 text-[var(--td-text)] outline-none transition focus:border-[var(--td-accent-border)]"
+                />
+              </label>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNewNoteOpen(false)}
+                  className="rounded-lg border border-[var(--td-border)] px-4 py-2 text-sm text-[var(--td-muted)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!content.trim()}
+                  className="rounded-lg border border-[var(--td-accent-border)] px-4 py-2 text-sm text-[var(--td-accent)] transition hover:bg-[var(--td-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
