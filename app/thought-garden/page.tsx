@@ -545,7 +545,7 @@ export default function ThoughtGardenPage() {
           }
         }}
         tabIndex={0}
-        className="rounded-2xl border border-[var(--td-card-border)] bg-[var(--td-card-bg)] p-6 outline-none transition hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] md:p-6"
+        className="rounded-2xl border border-[var(--td-card-border)] bg-[var(--td-card-bg)] p-6 outline-none transition hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] sm:p-7"
       >
         <h2 className="min-w-0 text-xl font-semibold leading-8 text-sky-300">
           {seed.title}
@@ -559,7 +559,7 @@ export default function ThoughtGardenPage() {
           onDoubleClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
-          className="mt-5 flex flex-wrap items-center justify-end gap-1 opacity-80 transition hover:opacity-100"
+          className="mt-6 flex flex-wrap items-center justify-end gap-1 opacity-80 transition hover:opacity-100"
         >
           <button
             type="button"
@@ -569,7 +569,7 @@ export default function ThoughtGardenPage() {
               event.stopPropagation();
               toggleEditor(seed);
             }}
-            className="grid h-11 w-11 place-items-center rounded-lg border border-transparent bg-transparent text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+            className="grid h-11 w-11 place-items-center rounded-lg bg-transparent text-base text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
           >
             ✎
           </button>
@@ -581,7 +581,7 @@ export default function ThoughtGardenPage() {
               event.stopPropagation();
               cycleSeedRating(seed);
             }}
-            className="grid h-11 place-items-center rounded-lg border border-transparent bg-transparent px-2 text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+            className="grid h-11 place-items-center rounded-lg bg-transparent px-2 text-base text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
           >
             {ratingLabel(seed.rating)}
           </button>
@@ -593,7 +593,7 @@ export default function ThoughtGardenPage() {
               event.stopPropagation();
               deleteSeed(seed);
             }}
-            className="grid h-11 w-11 place-items-center rounded-lg border border-transparent bg-transparent text-base text-[var(--td-text-soft)] transition hover:bg-[var(--td-hover)] hover:text-[var(--td-text)]"
+            className="grid h-11 w-11 place-items-center rounded-lg bg-transparent text-base text-[var(--td-text-soft)] transition hover:text-[var(--td-text)]"
           >
             🗑
           </button>
@@ -607,7 +607,7 @@ export default function ThoughtGardenPage() {
   return (
     <main
       data-theme="auto"
-      className="min-h-screen bg-[var(--td-bg)] px-4 py-6 text-[var(--td-text)] sm:px-5 sm:py-8"
+      className="min-h-screen bg-[var(--td-bg)] px-3 py-6 text-[var(--td-text)] sm:px-4 sm:py-9"
     >
       <div className="mx-auto max-w-5xl">
         <header className="mb-6 flex items-start justify-between gap-4">
@@ -722,23 +722,21 @@ export default function ThoughtGardenPage() {
           </section>
 
           <div className="order-1 lg:order-2">
-            <section className="overflow-hidden rounded-2xl border border-[var(--td-border)]/80 bg-[var(--td-panel)]">
-              <div className="border-b border-[var(--td-border)] px-5 py-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
-                  Notes
+            <div className="mb-5 px-1 sm:mb-6">
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--td-muted)]">
+                Notes
+              </p>
+            </div>
+
+            <div className="grid gap-7 sm:gap-8">
+              {sortedSeeds.map((seed) => renderSeedCard(seed))}
+
+              {sortedSeeds.length === 0 && (
+                <p className="py-8 text-center text-sm text-[var(--td-muted)]">
+                  No notes yet.
                 </p>
-              </div>
-
-              <div className="grid gap-5 p-4 sm:p-5">
-                {sortedSeeds.map((seed) => renderSeedCard(seed))}
-
-                {sortedSeeds.length === 0 && (
-                  <p className="py-8 text-center text-sm text-[var(--td-muted)]">
-                    No notes yet.
-                  </p>
-                )}
-              </div>
-            </section>
+              )}
+            </div>
           </div>
         </div>
       </div>
