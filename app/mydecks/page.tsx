@@ -26,6 +26,7 @@ type Deck = {
   image_ref?: string;
   star: number;
   trigger: string;
+  triggers?: string[];
   keywords: string[];
   links: string[];
   raw: string;
@@ -37,6 +38,12 @@ type Deck = {
 
 type SavedDeck = Partial<Deck> & {
   deckId?: string | null;
+};
+
+type RecallCandidate = {
+  deck: Deck;
+  score: number;
+  reasons: string[];
 };
 
 type QrHistoryItem = {
@@ -201,33 +208,38 @@ function loadSavedDecks() {
     const decks = JSON.parse(saved || "[]") as SavedDeck[];
     if (!saved) return [];
 
-    const normalized = decks.map((deck) => ({
-      deck_id: deck.deck_id ?? deck.deckId ?? "",
-      version: deck.version ?? "",
-      user_id: deck.user_id ?? "",
-      title: deck.title ?? "Untitled Deck",
-      created_at: deck.created_at ?? "",
-      updated_at: deck.updated_at ?? deck.created_at ?? "",
-      group_id: deck.group_id ?? "",
-      line_id: deck.line_id ?? "",
-      forked_from_deck_id:
-        deck.forked_from_deck_id ?? "",
+    const normalized = decks.map((deck) => {
+      const triggers = normalizeYamlList(deck.triggers);
 
-      genre: deck.genre ?? "",
-      subject: deck.subject ?? "",
-      unit: deck.unit ?? "",
+      return {
+        deck_id: deck.deck_id ?? deck.deckId ?? "",
+        version: deck.version ?? "",
+        user_id: deck.user_id ?? "",
+        title: deck.title ?? "Untitled Deck",
+        created_at: deck.created_at ?? "",
+        updated_at: deck.updated_at ?? deck.created_at ?? "",
+        group_id: deck.group_id ?? "",
+        line_id: deck.line_id ?? "",
+        forked_from_deck_id:
+          deck.forked_from_deck_id ?? "",
+
+        genre: deck.genre ?? "",
+        subject: deck.subject ?? "",
+        unit: deck.unit ?? "",
 
       image_ref: deck.image_ref ?? "",
       star: deck.star ?? 0,
-      trigger: deck.trigger ?? "",
+      trigger: deck.trigger ?? triggers.join(" / "),
+      triggers,
       keywords: deck.keywords ?? [],
-      links: deck.links ?? [],
+      links: normalizeYamlList(deck.links),
       raw: deck.raw ?? "",
       memo: deck.memo ?? "",
       output: deck.output ?? "",
-      relativePath: deck.relativePath ?? "",
-      contextId: deck.contextId ?? "",
-    }));
+        relativePath: deck.relativePath ?? "",
+        contextId: deck.contextId ?? "",
+      };
+    });
 
     return Array.from(
       new Map(normalized.map((deck) => [deckKey(deck), deck])).values(),
@@ -267,6 +279,43 @@ function unquoteYaml(value: string) {
 function getYamlValue(yaml: string, key: string) {
   const match = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
   return match ? unquoteYaml(match[1]) : "";
+}
+
+function normalizeYamlList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
+function getYamlList(yaml: string, key: string) {
+  const inline = yaml.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+
+  if (inline?.[1]?.trim().startsWith("[")) {
+    const values = inline[1]
+      .trim()
+      .replace(/^\[/, "")
+      .replace(/\]$/, "")
+      .split(",")
+      .map(unquoteYaml);
+
+    return normalizeYamlList(values);
+  }
+
+  const block = yaml.match(
+    new RegExp(`^${key}:\\s*\\n([\\s\\S]*?)(?=\\n[a-zA-Z0-9_-]+:|$)`, "m"),
+  );
+
+  if (!block) return [];
+
+  return normalizeYamlList(
+    block[1]
+      .split("\n")
+      .map((line) => line.match(/^  -\s*(.*)$/)?.[1])
+      .filter((value): value is string => value !== undefined)
+      .map(unquoteYaml),
+  );
 }
 
 function getYamlBlock(yaml: string, key: "raw" | "memo" | "output") {
@@ -578,8 +627,22 @@ function parseDeck(text: string): Deck | null {
 
   const image_ref =
     getYamlValue(yaml, "image_ref");
+  const triggers =
+    getYamlList(yaml, "trigger");
   const keywords: string[] = [];
-  const links: string[] = [];
+  const links =
+    normalizeYamlList(
+      getYamlList(yaml, "links"),
+    );
+  const triggerPreview =
+    triggers.length > 0
+      ? triggers.join(" / ")
+      : generateTrigger(
+          title,
+          raw,
+          memo,
+          output,
+        );
 
   return {
     deck_id: deckId,
@@ -596,12 +659,8 @@ function parseDeck(text: string): Deck | null {
     unit,
     image_ref,
     star: 0,
-    trigger: generateTrigger(
-      title,
-      raw,
-      memo,
-      output,
-    ),
+    trigger: triggerPreview,
+    triggers,
     keywords,
     links,
     raw,
@@ -615,8 +674,405 @@ function deckKey(deck: Deck) {
   return deck.deck_id || deck.title + deck.created_at;
 }
 
+function normalizeDeckPath(value?: string) {
+  return (value ?? "")
+    .replace(/\\/g, "/")
+    .replace(/\.md$/i, "")
+    .replace(/^\/+|\/+$/g, "");
+}
+
+function matchesRelatedPath(
+  relativePath: string | undefined,
+  link: string,
+) {
+  const normalizedPath =
+    normalizeDeckPath(relativePath);
+  const normalizedLink =
+    normalizeDeckPath(link);
+
+  if (!normalizedPath || !normalizedLink) {
+    return false;
+  }
+
+  return (
+    normalizedPath === normalizedLink ||
+    normalizedPath.startsWith(`${normalizedLink}/`)
+  );
+}
+
+function resolveRelatedDecks(
+  deck: Deck,
+  allDecks: Deck[],
+) {
+  if (!deck.links.length) return [];
+
+  return deck.links
+    .map((link) =>
+      allDecks.find(
+        (candidate) =>
+          deckKey(candidate) !== deckKey(deck) &&
+          matchesRelatedPath(candidate.relativePath, link),
+      ),
+    )
+    .filter((candidate): candidate is Deck => Boolean(candidate))
+    .filter(
+      (candidate, index, candidates) =>
+        candidates.findIndex(
+          (item) => deckKey(item) === deckKey(candidate),
+        ) === index,
+    )
+    .slice(0, 3);
+}
+
+function resolveResonanceDecks(
+  deck: Deck,
+  allDecks: Deck[],
+) {
+  const triggers =
+    normalizeYamlList(deck.triggers);
+
+  if (triggers.length === 0) return [];
+
+  const triggerSet = new Set(triggers);
+  const relatedKeys = new Set(
+    resolveRelatedDecks(deck, allDecks).map(deckKey),
+  );
+
+  return allDecks
+    .filter((candidate) => {
+      const candidateKey = deckKey(candidate);
+
+      if (candidateKey === deckKey(deck)) return false;
+      if (relatedKeys.has(candidateKey)) return false;
+
+      return normalizeYamlList(candidate.triggers)
+        .some((trigger) => triggerSet.has(trigger));
+    })
+    .filter(
+      (candidate, index, candidates) =>
+        candidates.findIndex(
+          (item) => deckKey(item) === deckKey(candidate),
+        ) === index,
+    )
+    .slice(0, 3);
+}
+
+function resolveContextDecks(
+  deck: Deck,
+  allDecks: Deck[],
+) {
+  const contextId =
+    deck.contextId?.trim() ?? "";
+
+  if (!contextId) return [];
+
+  const relatedKeys = new Set(
+    resolveRelatedDecks(deck, allDecks).map(deckKey),
+  );
+  const resonanceKeys = new Set(
+    resolveResonanceDecks(deck, allDecks).map(deckKey),
+  );
+
+  return allDecks
+    .filter((candidate) => {
+      const candidateKey = deckKey(candidate);
+
+      if (candidateKey === deckKey(deck)) return false;
+      if (relatedKeys.has(candidateKey)) return false;
+      if (resonanceKeys.has(candidateKey)) return false;
+
+      return candidate.contextId?.trim() === contextId;
+    })
+    .filter(
+      (candidate, index, candidates) =>
+        candidates.findIndex(
+          (item) => deckKey(item) === deckKey(candidate),
+        ) === index,
+    )
+    .slice(0, 3);
+}
+
+function addRecallScore(
+  candidates: Map<string, RecallCandidate>,
+  deck: Deck,
+  score: number,
+  reason: string,
+) {
+  const key = deckKey(deck);
+  const existing = candidates.get(key);
+
+  if (existing) {
+    existing.score += score;
+    if (!existing.reasons.includes(reason)) {
+      existing.reasons.push(reason);
+    }
+    return;
+  }
+
+  candidates.set(key, {
+    deck,
+    score,
+    reasons: [reason],
+  });
+}
+
+function hasTriggerOverlap(
+  deck: Deck,
+  candidate: Deck,
+) {
+  const triggers =
+    normalizeYamlList(deck.triggers);
+
+  if (triggers.length === 0) return false;
+
+  const triggerSet = new Set(triggers);
+
+  return normalizeYamlList(candidate.triggers)
+    .some((trigger) => triggerSet.has(trigger));
+}
+
+function hasContextMatch(
+  deck: Deck,
+  candidate: Deck,
+) {
+  const contextId =
+    deck.contextId?.trim() ?? "";
+
+  return Boolean(contextId) &&
+    candidate.contextId?.trim() === contextId;
+}
+
+function buildRecallCandidates(
+  deck: Deck,
+  allDecks: Deck[],
+) {
+  const candidates = new Map<string, RecallCandidate>();
+  const selfKey = deckKey(deck);
+
+  for (const relatedDeck of resolveRelatedDecks(deck, allDecks)) {
+    addRecallScore(candidates, relatedDeck, 10, "related");
+  }
+
+  for (const candidate of allDecks) {
+    if (deckKey(candidate) === selfKey) continue;
+
+    if (hasTriggerOverlap(deck, candidate)) {
+      addRecallScore(candidates, candidate, 3, "resonance");
+    }
+
+    if (hasContextMatch(deck, candidate)) {
+      addRecallScore(candidates, candidate, 1, "context");
+    }
+  }
+
+  return Array.from(candidates.values())
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+
+      return getRelatedDeckLabel(a.deck).localeCompare(
+        getRelatedDeckLabel(b.deck),
+      );
+    })
+    .slice(0, 5);
+}
+
+function getRelatedDeckLabel(deck: Deck) {
+  if (deck.subject && deck.unit) {
+    return `${deck.subject} ${deck.unit}`;
+  }
+
+  const normalizedPath =
+    normalizeDeckPath(deck.relativePath);
+  const parts = normalizedPath.split("/");
+
+  return parts.length >= 2
+    ? parts.slice(-2).join(" ")
+    : deck.title;
+}
+
 function shortDeckId(value?: string) {
   return value ? value.slice(0, 8) : "";
+}
+
+function TriggerBadges({
+  triggers,
+}: {
+  triggers?: string[];
+}) {
+  if (!triggers?.length) return null;
+
+  return (
+    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+      {triggers.map((trigger) => (
+        <span
+          key={trigger}
+          className="max-w-full truncate rounded-full border border-[var(--td-border)] px-2 py-0.5 text-xs text-[var(--td-muted)] opacity-75"
+        >
+          {trigger}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PrimaryRecall({
+  deck,
+  allDecks,
+  onOpen,
+}: {
+  deck: Deck;
+  allDecks: Deck[];
+  onOpen: (deck: Deck) => void;
+}) {
+  const primaryRecall =
+    buildRecallCandidates(deck, allDecks)[0];
+
+  if (!primaryRecall) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen(primaryRecall.deck);
+      }}
+      className="mt-2 grid w-full min-w-0 gap-1 rounded-lg border border-[var(--td-border)] px-3 py-2 text-left text-sm text-[var(--td-muted)] opacity-70 transition hover:border-[var(--td-border-strong)] hover:text-[var(--td-text-soft)] hover:opacity-90"
+    >
+      <span className="text-xs font-medium">
+        Primary Recall
+      </span>
+
+      <span className="min-w-0 truncate">
+        {`→ ${getRelatedDeckLabel(primaryRecall.deck)}`}
+      </span>
+
+      <span className="flex min-w-0 items-center justify-between gap-2 text-[10px] opacity-60">
+        <span className="min-w-0 truncate">
+          {primaryRecall.reasons.join(" • ")}
+        </span>
+        <span className="shrink-0">
+          ★{primaryRecall.score}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function RelatedDecks({
+  deck,
+  allDecks,
+  onOpen,
+}: {
+  deck: Deck;
+  allDecks: Deck[];
+  onOpen: (deck: Deck) => void;
+}) {
+  const relatedDecks =
+    resolveRelatedDecks(deck, allDecks);
+
+  if (relatedDecks.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-[var(--td-border)] pt-2 text-xs text-[var(--td-muted)] opacity-70">
+      <div className="mb-1 font-medium">
+        Related
+      </div>
+
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {relatedDecks.map((relatedDeck) => (
+          <button
+            key={deckKey(relatedDeck)}
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(relatedDeck);
+            }}
+            className="max-w-full truncate text-left transition hover:text-[var(--td-text-soft)]"
+          >
+            {getRelatedDeckLabel(relatedDeck)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResonanceDecks({
+  deck,
+  allDecks,
+  onOpen,
+}: {
+  deck: Deck;
+  allDecks: Deck[];
+  onOpen: (deck: Deck) => void;
+}) {
+  const resonanceDecks =
+    resolveResonanceDecks(deck, allDecks);
+
+  if (resonanceDecks.length === 0) return null;
+
+  return (
+    <div className="mt-2 text-xs text-[var(--td-muted)] opacity-50">
+      <div className="mb-1 font-medium">
+        Resonance
+      </div>
+
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {resonanceDecks.map((resonanceDeck) => (
+          <button
+            key={deckKey(resonanceDeck)}
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(resonanceDeck);
+            }}
+            className="max-w-full truncate text-left transition hover:text-[var(--td-text-soft)] hover:opacity-90"
+          >
+            {getRelatedDeckLabel(resonanceDeck)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContextDecks({
+  deck,
+  allDecks,
+  onOpen,
+}: {
+  deck: Deck;
+  allDecks: Deck[];
+  onOpen: (deck: Deck) => void;
+}) {
+  const contextDecks =
+    resolveContextDecks(deck, allDecks);
+
+  if (contextDecks.length === 0) return null;
+
+  return (
+    <div className="mt-2 text-xs text-[var(--td-muted)] opacity-40">
+      <div className="mb-1 font-medium">
+        Context
+      </div>
+
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {contextDecks.map((contextDeck) => (
+          <button
+            key={deckKey(contextDeck)}
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(contextDeck);
+            }}
+            className="max-w-full truncate text-left transition hover:text-[var(--td-text-soft)] hover:opacity-90"
+          >
+            {contextDeck.title}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function MyDecksPage() {
@@ -1321,9 +1777,35 @@ export default function MyDecksPage() {
                                 {previewDeck.title}
                               </p>
 
+                              <TriggerBadges triggers={previewDeck.triggers} />
+
+                              <PrimaryRecall
+                                deck={previewDeck}
+                                allDecks={decks}
+                                onOpen={openDeck}
+                              />
+
                               <p className="mt-1.5 line-clamp-2 text-sm italic leading-6 text-[var(--td-text-soft)]">
                                 {previewDeck.trigger ? previewDeck.trigger : "（要約なし）"}
                               </p>
+
+                              <RelatedDecks
+                                deck={previewDeck}
+                                allDecks={decks}
+                                onOpen={openDeck}
+                              />
+
+                              <ResonanceDecks
+                                deck={previewDeck}
+                                allDecks={decks}
+                                onOpen={openDeck}
+                              />
+
+                              <ContextDecks
+                                deck={previewDeck}
+                                allDecks={decks}
+                                onOpen={openDeck}
+                              />
 
                               <div className="mt-2 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
                                 <p className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-[0.42]">
@@ -1373,9 +1855,35 @@ export default function MyDecksPage() {
                                         {deck.title}
                                       </p>
 
+                                      <TriggerBadges triggers={deck.triggers} />
+
+                                      <PrimaryRecall
+                                        deck={deck}
+                                        allDecks={decks}
+                                        onOpen={openDeck}
+                                      />
+
                                       <p className="mt-1.5 line-clamp-2 text-sm italic leading-6 text-[var(--td-text-soft)]">
                                         {deck.trigger ? deck.trigger : "（要約なし）"}
                                       </p>
+
+                                      <RelatedDecks
+                                        deck={deck}
+                                        allDecks={decks}
+                                        onOpen={openDeck}
+                                      />
+
+                                      <ResonanceDecks
+                                        deck={deck}
+                                        allDecks={decks}
+                                        onOpen={openDeck}
+                                      />
+
+                                      <ContextDecks
+                                        deck={deck}
+                                        allDecks={decks}
+                                        onOpen={openDeck}
+                                      />
 
                                       <div className="mt-2 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
                                         <p className="min-w-0 truncate text-xs text-[var(--td-muted)] opacity-[0.42]">

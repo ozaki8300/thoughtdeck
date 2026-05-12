@@ -1,3 +1,5 @@
+import curriculumJson from "../public/curriculum.json";
+
 export type CurriculumTimeline = {
   start?: string;
   end?: string;
@@ -13,12 +15,14 @@ export type CurriculumUnit = {
 
 export type CurriculumSubject = {
   label?: string;
+  related?: string[];
   basic?: Record<string, CurriculumUnit>;
   advanced?: Record<string, CurriculumUnit>;
 };
 
 export type CurriculumSubjectCode = {
   name?: string;
+  related?: string[];
   credits?: number;
   required?: boolean;
   units?: Record<string, unknown>;
@@ -139,4 +143,122 @@ export function buildCurriculumPath(
   ]
     .filter(Boolean)
     .join("/");
+}
+
+function getCurriculumUnits(
+  genre: string,
+  subject: string,
+) {
+  const curriculum =
+    curriculumJson as CurriculumUniverse;
+  const genreData = curriculum[genre];
+
+  if (!genreData) return [];
+
+  const subjectGroup =
+    genreData as CurriculumSubjectGroup;
+
+  if (subjectGroup.subjects) {
+    const subjectData =
+      subjectGroup.subjects[subject];
+
+    return Object.keys(
+      subjectData?.units ?? {},
+    );
+  }
+
+  const subjectData = (
+    genreData as Record<string, CurriculumSubject>
+  )[subject];
+
+  return [
+    ...Object.keys(subjectData?.basic ?? {}),
+    ...Object.keys(subjectData?.advanced ?? {}),
+  ];
+}
+
+function getRelatedSubjects(
+  genre: string,
+  subject: string,
+) {
+  const curriculum =
+    curriculumJson as CurriculumUniverse;
+  const genreData = curriculum[genre];
+
+  if (!genreData) return [];
+
+  const subjectGroup =
+    genreData as CurriculumSubjectGroup;
+
+  if (subjectGroup.subjects) {
+    return subjectGroup.subjects[subject]?.related ?? [];
+  }
+
+  const subjectData = (
+    genreData as Record<string, CurriculumSubject>
+  )[subject];
+
+  return subjectData?.related ?? [];
+}
+
+export function buildRelatedLinks(
+  genre: string,
+  subject: string,
+  unit: string,
+): string[] {
+  const units = getCurriculumUnits(
+    genre,
+    subject,
+  );
+  const currentIndex = units.indexOf(unit);
+
+  if (currentIndex === -1) return [];
+
+  const links = [
+    ...[
+      units[currentIndex - 1],
+      units[currentIndex + 1],
+    ]
+      .filter(
+        (relatedUnit): relatedUnit is string =>
+          Boolean(relatedUnit) &&
+          relatedUnit !== unit,
+      )
+      .map((relatedUnit) =>
+        buildCurriculumPath(
+          genre,
+          subject,
+          relatedUnit,
+        ),
+      ),
+    ...getRelatedSubjects(
+      genre,
+      subject,
+    )
+      .filter(
+        (relatedSubject) =>
+          relatedSubject !== subject,
+      )
+      .map((relatedSubject) => {
+        const relatedUnit =
+          getCurriculumUnits(
+            genre,
+            relatedSubject,
+          )[0];
+
+        if (!relatedUnit) return null;
+
+        return buildCurriculumPath(
+          genre,
+          relatedSubject,
+          relatedUnit,
+        );
+      }),
+  ]
+    .filter(
+      (link): link is string =>
+        Boolean(link),
+    );
+
+  return [...new Set(links)];
 }

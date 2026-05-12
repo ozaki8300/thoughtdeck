@@ -14,6 +14,7 @@ import { buildThoughtDeckMd } from "./buildThoughtDeckMd";
 import {
   buildCurriculumIndex,
   buildCurriculumPath,
+  buildRelatedLinks,
   loadCurriculum,
   type CurriculumIndexItem,
 } from "./curriculum";
@@ -64,6 +65,7 @@ export type DeckState = {
   groupId?: string | null;
   lineId?: string | null;
   forkedFromDeckId?: string | null;
+  curriculumPath?: string | null;
   createdAt?: string;
   updatedAt?: string;
   restoreMode?: "revision" | "fork" | "readonly";
@@ -892,6 +894,9 @@ export function useDeckState(props?: UseDeckStateProps) {
   const [unit, setUnit] =
     useState("");
 
+  const [triggers, setTriggers] =
+    useState<string[]>([]);
+
   const [
     showCurriculumModal,
     setShowCurriculumModal,
@@ -1508,6 +1513,9 @@ export function useDeckState(props?: UseDeckStateProps) {
             groupId: restoredGroupId,
             lineId: restoredLineId,
             forkedFromDeckId: restoredForkedFromDeckId,
+            curriculumPath:
+              snapshot.curriculumPath ??
+              null,
             restoreMode,
             sourceDeckId,
             lineage,
@@ -1699,6 +1707,9 @@ export function useDeckState(props?: UseDeckStateProps) {
             forkedFromDeckId ||
             savedSnapshot.forkedFromDeckId ||
             savedSnapshot.lineage?.forkedFromDeckId ||
+            null,
+          curriculumPath:
+            savedSnapshot.curriculumPath ??
             null,
 
           restoreMode:
@@ -2042,28 +2053,56 @@ export function useDeckState(props?: UseDeckStateProps) {
     const activeUnit =
       curriculumOverride?.unit ??
       unit;
+    const relatedLinks =
+      buildRelatedLinks(
+        activeGenre,
+        activeSubject,
+        activeUnit,
+      );
 
     const savedSnapshot = JSON.parse(
       localStorage.getItem(STORAGE_KEY) || "{}",
     ) as Partial<DeckState>;
+    const curriculumPath =
+      buildCurriculumPath(
+        activeGenre,
+        activeSubject,
+        activeUnit,
+      );
+    const previousCurriculumPath =
+      savedSnapshot.curriculumPath ??
+      null;
+    const nextCurriculumPath =
+      curriculumPath;
+    const isSameCurriculum =
+      previousCurriculumPath ===
+      nextCurriculumPath;
     const activeNoteId =
-      savedSnapshot.noteId ??
-      generatePortableId("note");
+      isSameCurriculum
+        ? savedSnapshot.noteId ??
+          generatePortableId("note")
+        : generatePortableId("note");
     const activeGroupId =
-      groupId ||
-      savedSnapshot.groupId ||
-      savedSnapshot.lineage?.rootDeckId ||
-      activeNoteId;
+      isSameCurriculum
+        ? groupId ||
+          savedSnapshot.groupId ||
+          savedSnapshot.lineage?.rootDeckId ||
+          activeNoteId
+        : activeNoteId;
     const activeForkedFromDeckId =
-      forkedFromDeckId ||
-      savedSnapshot.forkedFromDeckId ||
-      savedSnapshot.lineage?.forkedFromDeckId ||
-      "";
+      isSameCurriculum
+        ? forkedFromDeckId ||
+          savedSnapshot.forkedFromDeckId ||
+          savedSnapshot.lineage?.forkedFromDeckId ||
+          ""
+        : "";
 
     const md = buildThoughtDeckMd({
       raw,
       memo,
       output,
+      trigger: triggers,
+      links: relatedLinks,
       deckId: activeNoteId,
       identity: {
         groupId: activeGroupId,
@@ -2081,18 +2120,34 @@ export function useDeckState(props?: UseDeckStateProps) {
     });
     const timestamp = getTimestampSlug();
     const fileTitle = getObsidianTitle(title, timestamp);
-    const curriculumPath =
-      buildCurriculumPath(
-        activeGenre,
-        activeSubject,
-        activeUnit,
-      );
     const filePath = `${curriculumPath}/${fileTitle}`;
     const url = `obsidian://new?file=${encodeURIComponent(filePath)}&clipboard=true`;
 
     // 長いMarkdown本文をURIに直接詰めると、ブラウザやOSのURI長制限でObsidianが起動しないことがある。
     // 本文はクリップボードに置き、Obsidian URIの clipboard=true で取り込ませる。
     await copyTextSafely(md);
+    setGroupId(activeGroupId);
+    setForkedFromDeckId(activeForkedFromDeckId);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...savedSnapshot,
+        raw,
+        memo,
+        output,
+        addedCards,
+        starred,
+        noteId: activeNoteId,
+        groupId: activeGroupId,
+        lineId,
+        forkedFromDeckId:
+          activeForkedFromDeckId ||
+          null,
+        curriculumPath:
+          nextCurriculumPath,
+        restoreMode: "revision",
+      }),
+    );
     setObsidianToast(`Obsidianに保存します：${fileTitle}`);
     window.setTimeout(() => setObsidianToast(""), 2600);
     // updateMyDecksLocal(
@@ -2271,6 +2326,8 @@ export function useDeckState(props?: UseDeckStateProps) {
     setSubject,
     unit,
     setUnit,
+    triggers,
+    setTriggers,
     showCurriculumModal,
     setShowCurriculumModal,
     curriculumIndex,

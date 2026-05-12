@@ -222,6 +222,7 @@ export default function Home(props: HomeProps) {
   const [openAbout, setOpenAbout] = useState(false);
   const [isRestoredFromUrl, setIsRestoredFromUrl] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
+  const [triggerInput, setTriggerInput] = useState("");
   const searchParams = props.searchParams;
   const snapshotReadOnly = searchParams.ro === "1";
   const rawContext = searchParams.context;
@@ -278,6 +279,7 @@ export default function Home(props: HomeProps) {
     setSubject,
     unit,
     setUnit,
+    setTriggers,
     showCurriculumModal,
     setShowCurriculumModal,
     curriculumSearch,
@@ -1727,6 +1729,22 @@ export default function Home(props: HomeProps) {
                   setCurriculumSearch(event.target.value);
                 }}
                 placeholder="科目を検索（OBH / FIN / ADS）"
+                className="w-full rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
+              />
+
+              <input
+                value={triggerInput}
+                onChange={(event) => {
+                  event.stopPropagation();
+                  setTriggerInput(event.target.value);
+                  setTriggers(
+                    event.target.value
+                      .split(",")
+                      .map((value) => value.trim())
+                      .filter(Boolean),
+                  );
+                }}
+                placeholder="Trigger（例：投資判断, 意思決定）"
                 className="w-full rounded-xl border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11pt] text-[var(--td-text)] outline-none"
               />
 

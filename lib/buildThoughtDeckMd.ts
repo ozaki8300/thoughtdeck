@@ -26,6 +26,8 @@ type BuildThoughtDeckMdArgs = {
   raw: string;
   memo: string;
   output: string;
+  trigger?: string[];
+  links?: string[];
 
   deckId: string | null;
   contextId?: string | null;
@@ -129,6 +131,22 @@ function lineageValue(value?: string | number | null) {
   return `"${yamlSafe(String(value))}"`;
 }
 
+function yamlList(values: string[] | undefined) {
+  if (!values?.length) return "links: []";
+
+  return `links:\n${values
+    .map((value) => `  - ${value}`)
+    .join("\n")}`;
+}
+
+function yamlTriggerList(values: string[] | undefined) {
+  if (!values?.length) return "trigger: []";
+
+  return `trigger:\n${values
+    .map((value) => `  - ${value}`)
+    .join("\n")}`;
+}
+
 // 変更箇所: Markdown本文で空データを見える形にする
 function visible(value: string | null | undefined) {
   return value && value.trim() ? value : "_(empty)_";
@@ -138,6 +156,8 @@ export function buildThoughtDeckMd({
   raw,
   memo,
   output,
+  trigger,
+  links,
 
   deckId,
   contextId,
@@ -235,10 +255,10 @@ ${yamlBlock(memo)}
   output: |
 ${yamlBlock(output)}
 
-trigger: []
+${yamlTriggerList(trigger)}
 
 keywords: []
-links: []
+${yamlList(links)}
 ---
 
 ${visible(raw)}
