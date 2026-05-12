@@ -501,6 +501,7 @@ type ScanStats = {
   thoughtDecks: number;
   updated: number;
   added: number;
+  removed: number;
   skipped: number;
 };
 
@@ -1075,6 +1076,44 @@ function deckKey(deck: Deck) {
   return deck.deck_id || deck.title + deck.created_at;
 }
 
+function deckLifecycleKey(deck: Deck) {
+  return normalizeDeckPath(deck.relativePath) || deckKey(deck);
+}
+
+function synchronizeDecks(
+  importedDecks: Deck[],
+  existingDecks: Deck[],
+) {
+  const importedMap = new Map(
+    importedDecks.map((deck) => [
+      deckLifecycleKey(deck),
+      deck,
+    ]),
+  );
+  const syncedKeys = new Set<string>();
+  const syncedDecks = existingDecks
+    .filter((deck) =>
+      importedMap.has(deckLifecycleKey(deck)),
+    )
+    .map((deck) => {
+      const key = deckLifecycleKey(deck);
+      syncedKeys.add(key);
+
+      return importedMap.get(key) ?? deck;
+    });
+
+  for (const importedDeck of importedDecks) {
+    const key = deckLifecycleKey(importedDeck);
+
+    if (syncedKeys.has(key)) continue;
+
+    syncedDecks.push(importedDeck);
+    syncedKeys.add(key);
+  }
+
+  return syncedDecks;
+}
+
 function normalizeDeckPath(value?: string) {
   return (value ?? "")
     .replace(/\\/g, "/")
@@ -1575,8 +1614,30 @@ export default function MyDecksPage() {
     loaded: Deck[],
     successMessage?: string,
     stats?: ScanStats,
+    synchronize = false,
   ) => {
     if (loaded.length === 0) {
+      if (synchronize) {
+        if (stats) {
+          stats.updated = 0;
+          stats.added = 0;
+          stats.removed = decks.length;
+        }
+        setDecks([]);
+        setHighlightedKeys([]);
+        setImportMessage(
+          successMessage ??
+            `0件追加 / 0件更新 / ${decks.length}件削除`,
+        );
+
+        window.setTimeout(
+          () => setImportMessage(""),
+          3000,
+        );
+
+        return;
+      }
+
       setImportMessage(
         "ThoughtDeck形式のファイルが見つかりませんでした",
       );
@@ -1584,10 +1645,18 @@ export default function MyDecksPage() {
       return;
     }
 
-    const loadedKeys = loaded.map(deckKey);
+    const loadedKeys = loaded.map((deck) =>
+      synchronize
+        ? deckLifecycleKey(deck)
+        : deckKey(deck),
+    );
 
     const currentKeys = new Set(
-      decks.map(deckKey),
+      decks.map((deck) =>
+        synchronize
+          ? deckLifecycleKey(deck)
+          : deckKey(deck),
+      ),
     );
 
     const updatedCount =
@@ -1597,8 +1666,27 @@ export default function MyDecksPage() {
 
     const addedCount =
       loaded.length - updatedCount;
+    const removedCount =
+      synchronize
+        ? decks.filter((deck) =>
+            !loadedKeys.includes(deckLifecycleKey(deck)),
+          ).length
+        : 0;
+
+    if (stats) {
+      stats.updated = updatedCount;
+      stats.added = addedCount;
+      stats.removed = removedCount;
+    }
 
     setDecks((current) => {
+      if (synchronize) {
+        return synchronizeDecks(
+          loaded,
+          current,
+        );
+      }
+
       const next = [...current];
 
       for (const imported of loaded) {
@@ -1644,7 +1732,9 @@ export default function MyDecksPage() {
 
     setImportMessage(
       successMessage ??
-        `${addedCount}件追加 / ${updatedCount}件更新`,
+        `${addedCount}件追加 / ${updatedCount}件更新${
+          stats?.removed ? ` / ${stats.removed}件削除` : ""
+        }`,
     );
 
     window.setTimeout(
@@ -1786,6 +1876,7 @@ export default function MyDecksPage() {
         thoughtDecks: 0,
         updated: 0,
         added: 0,
+        removed: 0,
         skipped: 0,
       };
 
@@ -1799,6 +1890,7 @@ export default function MyDecksPage() {
         loaded,
         undefined,
         stats,
+        true,
       );
 
       setImportMessage(
@@ -1807,6 +1899,7 @@ export default function MyDecksPage() {
           `${stats.thoughtDecks} ThoughtDeck`,
           `${stats.updated} updated`,
           `${stats.added} added`,
+          `${stats.removed} removed`,
           `${stats.skipped} skipped`,
         ].join(" • "),
       );
@@ -1852,7 +1945,12 @@ export default function MyDecksPage() {
       )
     ).filter((deck): deck is Deck => Boolean(deck));
 
-    mergeImportedDecks(loaded);
+    mergeImportedDecks(
+      loaded,
+      undefined,
+      undefined,
+      loaded.length > 0,
+    );
 
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -1937,6 +2035,16 @@ export default function MyDecksPage() {
     );
   };
 
+  const deleteLocalDeck = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    key: string,
+  ) => {
+    event.stopPropagation();
+    setDecks((current) =>
+      current.filter((deck) => deckKey(deck) !== key),
+    );
+  };
+
   return (
     <main data-theme="auto" className="mydecks-page td-app-enter min-h-screen overflow-x-hidden bg-[var(--td-bg)] px-5 py-6 text-[var(--td-text)]">
       <style jsx global>{`
@@ -2000,7 +2108,7 @@ export default function MyDecksPage() {
               isDragging ? "border-[var(--td-accent-border)] bg-[var(--td-hover)]" : ""
             }`}
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="grid gap-2 sm:hidden">
                 <button
                   onClick={() => fileRef.current?.click()}
@@ -2037,7 +2145,9 @@ export default function MyDecksPage() {
               </div>
 
               {importMessage && (
-                <span className="break-words text-xs text-[var(--td-muted)] opacity-35 transition hover:opacity-80">{importMessage}</span>
+                <div className="absolute right-0 top-full z-20 mt-2 max-w-[min(28rem,calc(100vw-2.5rem))] rounded-lg border border-[var(--td-border)] bg-[var(--td-panel)] px-3 py-2 text-[11px] text-[var(--td-muted)] opacity-90 shadow-lg backdrop-blur">
+                  {importMessage}
+                </div>
               )}
 
               <div className="hidden flex-wrap items-center gap-2 sm:flex">
@@ -2169,12 +2279,21 @@ export default function MyDecksPage() {
                         {!isLineageExpanded && previewDeck && (
                           <article
                             onClick={() => openDeck(previewDeck)}
-                            className={`group min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] px-4 py-3 shadow-sm transition-all duration-200 hover:border-[var(--td-border-strong)] hover:shadow-sm ${
+                            className={`group relative min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] px-4 py-3 shadow-sm transition-all duration-200 hover:border-[var(--td-border-strong)] hover:shadow-sm ${
                               highlightedKeys.includes(previewKey) ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)]" : ""
                             }`}
                           >
+                            <button
+                              type="button"
+                              onClick={(event) => deleteLocalDeck(event, previewKey)}
+                              className="absolute right-3 top-3 rounded-full border border-transparent px-1.5 py-0.5 text-xs text-red-300/70 opacity-70 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200 hover:opacity-100"
+                              title="MyDecksから削除"
+                            >
+                              🗑
+                            </button>
+
                             <div className="min-w-0">
-                              <p className="line-clamp-1 text-base font-semibold leading-6 text-[var(--td-text)]">
+                              <p className="line-clamp-1 pr-8 text-base font-semibold leading-6 text-[var(--td-text)]">
                                 {previewDeck.title}
                               </p>
 
@@ -2218,8 +2337,10 @@ export default function MyDecksPage() {
                                     <button
                                       key={value}
                                       onClick={(event) => updateStar(event, previewKey, value)}
-                                      className={`text-sm opacity-35 transition hover:opacity-60 ${
-                                        value <= previewDeck.star ? "text-[var(--td-accent)] opacity-60" : "text-[var(--td-muted)]"
+                                      className={`text-sm transition ${
+                                        value <= previewDeck.star
+                                          ? "text-yellow-300 opacity-90 hover:text-yellow-200"
+                                          : "text-yellow-100/30 hover:text-yellow-200/70"
                                       }`}
                                       title={`${value} stars`}
                                     >
@@ -2247,12 +2368,21 @@ export default function MyDecksPage() {
                                   <article
                                     key={key}
                                     onClick={() => openDeck(deck)}
-                                    className={`group min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] px-4 py-3 shadow-sm transition-all duration-200 hover:border-[var(--td-border-strong)] hover:shadow-sm ${
+                                    className={`group relative min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--td-border)] bg-[var(--td-panel)] px-4 py-3 shadow-sm transition-all duration-200 hover:border-[var(--td-border-strong)] hover:shadow-sm ${
                                       highlightedKeys.includes(key) ? "border-[var(--td-accent-border)] bg-[var(--td-accent-bg)]" : ""
                                     }`}
                                   >
+                                    <button
+                                      type="button"
+                                      onClick={(event) => deleteLocalDeck(event, key)}
+                                      className="absolute right-3 top-3 rounded-full border border-transparent px-1.5 py-0.5 text-xs text-red-300/70 opacity-70 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200 hover:opacity-100"
+                                      title="MyDecksから削除"
+                                    >
+                                      🗑
+                                    </button>
+
                                     <div className="min-w-0">
-                                      <p className="line-clamp-1 text-base font-semibold leading-6 text-[var(--td-text)]">
+                                      <p className="line-clamp-1 pr-8 text-base font-semibold leading-6 text-[var(--td-text)]">
                                         {deck.title}
                                       </p>
 
@@ -2296,8 +2426,10 @@ export default function MyDecksPage() {
                                             <button
                                               key={value}
                                               onClick={(event) => updateStar(event, key, value)}
-                                              className={`text-sm opacity-35 transition hover:opacity-60 ${
-                                                value <= deck.star ? "text-[var(--td-accent)] opacity-60" : "text-[var(--td-muted)]"
+                                              className={`text-sm transition ${
+                                                value <= deck.star
+                                                  ? "text-yellow-300 opacity-90 hover:text-yellow-200"
+                                                  : "text-yellow-100/30 hover:text-yellow-200/70"
                                               }`}
                                               title={`${value} stars`}
                                             >
