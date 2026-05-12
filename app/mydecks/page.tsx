@@ -1554,7 +1554,18 @@ export default function MyDecksPage() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const openDeck = (deck: Deck) => {
+  const openDeck = (
+    deck: Deck,
+    options?: {
+      fork?: boolean;
+    },
+  ) => {
+    const curriculumPath =
+      buildCurriculumPath(
+        deck.genre,
+        deck.subject,
+        deck.unit,
+      );
     const encoded = encodeDeck({
       raw: deck.raw,
       memo: deck.memo,
@@ -1570,8 +1581,11 @@ export default function MyDecksPage() {
         deck.line_id ||
         "main",
       forkedFromDeckId:
-        deck.forked_from_deck_id ||
-        null,
+        options?.fork
+          ? deck.deck_id
+          : deck.forked_from_deck_id ||
+            null,
+      curriculumPath,
       createdAt: deck.created_at,
       updatedAt: deck.updated_at,
     });
@@ -1620,6 +1634,10 @@ export default function MyDecksPage() {
       params.set("siblings", siblingTitles.join("|"));
     }
 
+    if (options?.fork) {
+      params.set("fork", "1");
+    }
+
     window.location.assign(`/thoughtdeck?${params.toString()}`);
   };
 
@@ -1642,6 +1660,14 @@ export default function MyDecksPage() {
     setDecks((current) =>
       current.filter((deck) => deckKey(deck) !== key),
     );
+  };
+
+  const forkDeck = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    deck: Deck,
+  ) => {
+    event.stopPropagation();
+    openDeck(deck, { fork: true });
   };
 
   return (
@@ -1884,6 +1910,15 @@ export default function MyDecksPage() {
                           >
                             <button
                               type="button"
+                              onClick={(event) => forkDeck(event, previewDeck)}
+                              className="absolute right-12 top-3 rounded-full border border-transparent px-1.5 py-0.5 text-xs text-blue-200/60 opacity-70 transition hover:border-blue-300/20 hover:bg-blue-500/10 hover:text-blue-100 hover:opacity-100"
+                              title="Fork"
+                            >
+                              ⎇ Fork
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={(event) => deleteLocalDeck(event, previewKey)}
                               className="absolute right-3 top-3 rounded-full border border-transparent px-1.5 py-0.5 text-xs text-red-300/70 opacity-70 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200 hover:opacity-100"
                               title="MyDecksから削除"
@@ -1892,7 +1927,7 @@ export default function MyDecksPage() {
                             </button>
 
                             <div className="min-w-0">
-                              <p className="line-clamp-1 pr-8 text-base font-semibold leading-6 text-[var(--td-text)]">
+                              <p className="line-clamp-1 pr-24 text-base font-semibold leading-6 text-[var(--td-text)]">
                                 {previewDeck.title}
                               </p>
 
@@ -1973,6 +2008,15 @@ export default function MyDecksPage() {
                                   >
                                     <button
                                       type="button"
+                                      onClick={(event) => forkDeck(event, deck)}
+                                      className="absolute right-12 top-3 rounded-full border border-transparent px-1.5 py-0.5 text-xs text-blue-200/60 opacity-70 transition hover:border-blue-300/20 hover:bg-blue-500/10 hover:text-blue-100 hover:opacity-100"
+                                      title="Fork"
+                                    >
+                                      ⎇ Fork
+                                    </button>
+
+                                    <button
+                                      type="button"
                                       onClick={(event) => deleteLocalDeck(event, key)}
                                       className="absolute right-3 top-3 rounded-full border border-transparent px-1.5 py-0.5 text-xs text-red-300/70 opacity-70 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200 hover:opacity-100"
                                       title="MyDecksから削除"
@@ -1981,7 +2025,7 @@ export default function MyDecksPage() {
                                     </button>
 
                                     <div className="min-w-0">
-                                      <p className="line-clamp-1 pr-8 text-base font-semibold leading-6 text-[var(--td-text)]">
+                                      <p className="line-clamp-1 pr-24 text-base font-semibold leading-6 text-[var(--td-text)]">
                                         {deck.title}
                                       </p>
 

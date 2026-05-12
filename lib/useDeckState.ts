@@ -1386,6 +1386,7 @@ export function useDeckState(props?: UseDeckStateProps) {
     const params = new URLSearchParams(window.location.search);
     const resume = params.get("resume");
     const d = params.get("d");
+    const isForkMode = params.get("fork") === "1";
 
     if (resume) {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -1429,29 +1430,39 @@ export function useDeckState(props?: UseDeckStateProps) {
 
         const snapshot = JSON.parse(json) as Partial<DeckState>;
         const restoreMode =
-          snapshot.restoreMode ??
-          "revision";
+          isForkMode
+            ? "fork"
+            : snapshot.restoreMode ??
+              "revision";
         const publicationId =
           snapshot.publicationId ??
           null;
         const publishedAt =
           snapshot.publishedAt ??
           null;
-        const sourceDeckId =
-          snapshot.sourceDeckId ??
-          snapshot.deckId ??
-          null;
-        const semanticNoteId =
+        const restoredDeckId =
           snapshot.noteId ??
           snapshot.sourceDeckId ??
           snapshot.deckId ??
           snapshot.groupId ??
-          generatePortableId("note");
-        const snapshotForkedFromDeckId =
-          snapshot.forkedFromDeckId ??
-          snapshot.lineage?.forkedFromDeckId ??
-          (restoreMode === "fork" ? sourceDeckId : null) ??
           null;
+        const sourceDeckId =
+          restoredDeckId ??
+          snapshot.sourceDeckId ??
+          snapshot.deckId ??
+          null;
+        const semanticNoteId =
+          isForkMode
+            ? generatePortableId("note")
+            : restoredDeckId ??
+              generatePortableId("note");
+        const snapshotForkedFromDeckId =
+          isForkMode
+            ? restoredDeckId
+            : snapshot.forkedFromDeckId ??
+              snapshot.lineage?.forkedFromDeckId ??
+              (restoreMode === "fork" ? sourceDeckId : null) ??
+              null;
         const forkedFromShareId =
           snapshot.sourceShareId ??
           snapshot.shareId ??
@@ -1460,12 +1471,16 @@ export function useDeckState(props?: UseDeckStateProps) {
         // semantic note continuity is handled separately
         const migratedDeckId =
           generateWorkspaceId();
+        const restoredGroupId =
+          snapshot.groupId ||
+          snapshot.lineage?.rootDeckId ||
+          restoredDeckId ||
+          semanticNoteId;
         const lineage =
           restoreMode === "fork"
             ? {
                 rootDeckId:
-                  sourceDeckId ??
-                  migratedDeckId,
+                  restoredGroupId,
 
                 forkedFromDeckId:
                   snapshotForkedFromDeckId,
@@ -1474,20 +1489,17 @@ export function useDeckState(props?: UseDeckStateProps) {
               }
             : snapshot.lineage ?? {
                 rootDeckId:
-                  sourceDeckId ??
-                  migratedDeckId,
+                  restoredGroupId,
               };
-        const restoredGroupId =
-          snapshot.groupId ||
-          snapshot.lineage?.rootDeckId ||
-          semanticNoteId;
         const restoredLineId =
           snapshot.lineId ||
           "main";
         const restoredForkedFromDeckId =
-          snapshot.forkedFromDeckId ||
-          lineage.forkedFromDeckId ||
-          "";
+          isForkMode
+            ? snapshotForkedFromDeckId ?? ""
+            : snapshot.forkedFromDeckId ||
+              lineage.forkedFromDeckId ||
+              "";
 
         setRaw(snapshot.raw ?? "");
         setMemo(snapshot.memo ?? "");
