@@ -16,6 +16,8 @@ export type GardenSeed = {
   nextReviewAt: string;
   loopCount: number;
   rating: number;
+  viewCount: number;
+  totalDwellMs: number;
   activeLayerIndex: number;
   layers: GardenLayer[];
 };
@@ -110,6 +112,14 @@ function normalizeSeed(value: Partial<GardenSeed>) {
         : (value as Partial<GardenSeed> & { star?: boolean }).star
           ? 5
           : 0,
+    viewCount:
+      typeof value.viewCount === "number"
+        ? Math.max(0, Math.round(value.viewCount))
+        : 0,
+    totalDwellMs:
+      typeof value.totalDwellMs === "number"
+        ? Math.max(0, Math.round(value.totalDwellMs))
+        : 0,
     activeLayerIndex:
       typeof value.activeLayerIndex === "number" &&
       value.activeLayerIndex >= 0 &&
@@ -137,6 +147,8 @@ export function createGardenSeed(
     nextReviewAt: getNextReviewDate(0),
     loopCount: 0,
     rating: 0,
+    viewCount: 0,
+    totalDwellMs: 0,
     activeLayerIndex: 0,
     layers: [
       {
@@ -268,6 +280,24 @@ export function advanceGardenLayer(seed: GardenSeed) {
   } satisfies GardenSeed;
 }
 
+export function recordGardenSeedDwell(
+  seed: GardenSeed,
+  dwellMs: number,
+) {
+  const normalizedDwellMs = Math.max(0, Math.round(dwellMs));
+
+  if (normalizedDwellMs < 3000) {
+    return seed;
+  }
+
+  return {
+    ...seed,
+    viewCount: seed.viewCount + 1,
+    totalDwellMs: seed.totalDwellMs + normalizedDwellMs,
+    lastSeenAt: new Date().toISOString(),
+  } satisfies GardenSeed;
+}
+
 export function updateGardenSeedState(
   seed: GardenSeed,
   state: GardenSeed["state"],
@@ -370,6 +400,8 @@ export function buildGardenMarkdown(
     lines.push(`title: ${seed.title}`);
     lines.push(`state: ${seed.state}`);
     lines.push(`rating: ${seed.rating}`);
+    lines.push(`viewCount: ${seed.viewCount}`);
+    lines.push(`totalDwellMs: ${seed.totalDwellMs}`);
     lines.push(`activeLayerIndex: ${seed.activeLayerIndex}`);
     lines.push(`loopCount: ${seed.loopCount}`);
     lines.push(`updated: ${seed.lastSeenAt}`);
@@ -432,6 +464,10 @@ export function parseGardenMarkdown(
         rating:
           Number(readGardenMeta(metaBlock, "rating")) ||
           (readGardenMeta(metaBlock, "star") === "true" ? 5 : 0),
+        viewCount:
+          Number(readGardenMeta(metaBlock, "viewCount")) || 0,
+        totalDwellMs:
+          Number(readGardenMeta(metaBlock, "totalDwellMs")) || 0,
         activeLayerIndex:
           Number(readGardenMeta(metaBlock, "activeLayerIndex")) ||
           0,

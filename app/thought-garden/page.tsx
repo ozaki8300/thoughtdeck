@@ -16,6 +16,7 @@ import {
   createGardenSeed,
   loadGardenSeeds,
   parseGardenMarkdown,
+  recordGardenSeedDwell,
   saveGardenSeeds,
   updateActiveGardenLayer,
   updateGardenSeedRating,
@@ -189,6 +190,25 @@ function ratingLabel(rating: number) {
   return `${"★".repeat(rating)}${"☆".repeat(5 - rating)}`;
 }
 
+function formatDwellTime(totalDwellMs: number) {
+  const totalMinutes = Math.floor(totalDwellMs / 60000);
+
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  if (totalMinutes >= 1) {
+    return `${totalMinutes}m`;
+  }
+
+  const seconds = Math.floor(totalDwellMs / 1000);
+
+  return `${seconds}s`;
+}
+
 export default function ThoughtGardenPage() {
   const router = useRouter();
   const [seeds, setSeeds] = useState<GardenSeed[]>([]);
@@ -216,6 +236,7 @@ export default function ThoughtGardenPage() {
   const suppressCardClickUntilBySeedRef = useRef<Record<string, number>>(
     {},
   );
+  const dwellStartAtBySeedRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const loadedSeeds = loadGardenSeeds();
@@ -235,6 +256,14 @@ export default function ThoughtGardenPage() {
       [...seeds].sort((a, b) => {
         if (b.rating !== a.rating) {
           return b.rating - a.rating;
+        }
+
+        if (b.viewCount !== a.viewCount) {
+          return b.viewCount - a.viewCount;
+        }
+
+        if (b.totalDwellMs !== a.totalDwellMs) {
+          return b.totalDwellMs - a.totalDwellMs;
         }
 
         return b.lastSeenAt.localeCompare(a.lastSeenAt);
@@ -258,11 +287,45 @@ export default function ThoughtGardenPage() {
     setIsNewNoteOpen(false);
   };
 
+  const beginSeedDwell = (seedId: string) => {
+    if (!dwellStartAtBySeedRef.current[seedId]) {
+      dwellStartAtBySeedRef.current[seedId] = Date.now();
+    }
+  };
+
+  const settleSeedDwell = (seedId: string) => {
+    const dwellStartedAt = dwellStartAtBySeedRef.current[seedId];
+
+    delete dwellStartAtBySeedRef.current[seedId];
+
+    if (!dwellStartedAt) {
+      return;
+    }
+
+    const dwellMs = Date.now() - dwellStartedAt;
+
+    setSeeds((current) =>
+      current.map((currentSeed) =>
+        currentSeed.id === seedId
+          ? recordGardenSeedDwell(currentSeed, dwellMs)
+          : currentSeed,
+      ),
+    );
+  };
+
   const toggleSeedExpanded = (seed: GardenSeed) => {
+    const willExpand = !(expandedSeedIds[seed.id] ?? false);
+
     setExpandedSeedIds((current) => ({
       ...current,
       [seed.id]: !current[seed.id],
     }));
+
+    if (willExpand) {
+      beginSeedDwell(seed.id);
+    } else {
+      settleSeedDwell(seed.id);
+    }
   };
 
   const cycleVisibleNote = (seed: GardenSeed, direction: -1 | 1) => {
@@ -278,6 +341,7 @@ export default function ThoughtGardenPage() {
       ...current,
       [seed.id]: direction,
     }));
+    settleSeedDwell(seed.id);
 
     window.setTimeout(() => {
       setSeeds((current) =>
@@ -286,18 +350,19 @@ export default function ThoughtGardenPage() {
             ? currentSeed.layers.length <= 1
               ? currentSeed
               : direction === 1
-              ? advanceGardenLayer(currentSeed)
-              : {
-                  ...currentSeed,
-                  activeLayerIndex:
-                    (currentSeed.activeLayerIndex -
-                      1 +
-                      currentSeed.layers.length) %
-                    currentSeed.layers.length,
-                }
+                ? advanceGardenLayer(currentSeed)
+                : {
+                    ...currentSeed,
+                    activeLayerIndex:
+                      (currentSeed.activeLayerIndex -
+                        1 +
+                        currentSeed.layers.length) %
+                      currentSeed.layers.length,
+                  }
             : currentSeed,
         ),
       );
+      beginSeedDwell(seed.id);
 
       window.setTimeout(() => {
         setTransitioningSeedIds((current) => ({
@@ -536,6 +601,12 @@ export default function ThoughtGardenPage() {
         className="mt-5 grid gap-5 rounded-xl border border-[var(--td-border)]/70 bg-[var(--td-panel)]/55 p-4"
       >
         <div className="grid gap-4">
+          <p className="text-xs text-[var(--td-muted)] opacity-80">
+            Viewed {seed.viewCount} times
+          </p>
+          <p className="text-xs text-[var(--td-muted)] opacity-80">
+            Stayed {formatDwellTime(seed.totalDwellMs)}
+          </p>
           <label className="grid gap-2 text-sm text-[var(--td-text-soft)]">
             Title
             <input
@@ -611,6 +682,44 @@ export default function ThoughtGardenPage() {
     const isExpanded = expandedSeedIds[seed.id] ?? false;
     const isTransitioning =
       transitioningSeedIds[seed.id] ?? false;
+    const lastSeenAt = new Date(seed.lastSeenAt).getTime();
+    const daysSinceSeen = Number.isNaN(lastSeenAt)
+      ? 30
+      : Math.max(0, (Date.now() - lastSeenAt) / 86400000);
+    const recencyWeight = Math.max(0.35, 1 / (1 + daysSinceSeen / 14));
+    const dwellWeight = Math.log1p(seed.totalDwellMs / 10000);
+    const revisitWeight = Math.log1p(seed.viewCount) * 0.8;
+    const heatScore = (dwellWeight + revisitWeight) * recencyWeight;
+    const viewHeatClass =
+      heatScore >= 4
+        ? "-translate-y-px ring-1 ring-[var(--td-border)]/25 shadow-[0_18px_44px_rgba(0,0,0,0.14)]"
+        : heatScore >= 1.8
+          ? "ring-1 ring-[var(--td-border)]/15 shadow-[0_14px_34px_rgba(0,0,0,0.1)]"
+          : "shadow-none";
+    const titleHeatClass =
+      heatScore >= 4
+        ? "brightness-[1.06]"
+        : heatScore >= 1.8
+          ? "brightness-[1.03]"
+          : "brightness-100";
+    const recencyClass =
+      recencyWeight <= 0.45
+        ? "brightness-[0.985]"
+        : "brightness-100";
+    const cardWeightClass =
+      seed.rating >= 5
+        ? "border-[var(--td-border-strong)]/80 bg-[var(--td-card-bg)]/100 opacity-100"
+        : seed.rating >= 3
+          ? "border-[var(--td-card-border)]/95 bg-[var(--td-card-bg)]/98 opacity-[0.99]"
+          : seed.rating === 0
+            ? "border-[var(--td-card-border)]/70 bg-[var(--td-card-bg)]/94 opacity-[0.965]"
+            : "border-[var(--td-card-border)]/85 bg-[var(--td-card-bg)]/96 opacity-[0.98]";
+    const titleWeightClass =
+      seed.rating >= 5
+        ? "text-sky-200"
+        : seed.rating === 0
+          ? "text-sky-300/90"
+          : "text-sky-300";
     const activeLayerIndex = Math.min(
       seed.activeLayerIndex,
       Math.max(seed.layers.length - 1, 0),
@@ -636,6 +745,7 @@ export default function ThoughtGardenPage() {
         onPointerCancel={() => {
           delete swipeStartBySeedRef.current[seed.id];
         }}
+        onPointerLeave={() => settleSeedDwell(seed.id)}
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             cycleVisibleNote(seed, -1);
@@ -651,25 +761,70 @@ export default function ThoughtGardenPage() {
           }
         }}
         tabIndex={0}
-        className="touch-pan-y rounded-2xl border border-[var(--td-card-border)] bg-[var(--td-card-bg)] p-6 outline-none transition hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] sm:p-7"
+        className={[
+          "group relative touch-pan-y rounded-2xl border p-6 outline-none transition-[border-color,background-color,opacity,box-shadow,transform] duration-300 ease-out hover:border-[var(--td-border-strong)] focus:border-[var(--td-accent-border)] sm:p-7",
+          cardWeightClass,
+          viewHeatClass,
+          recencyClass,
+        ].join(" ")}
       >
-        <h2 className="min-w-0 text-xl font-semibold leading-8 text-sky-300">
+        {seed.layers.length > 1 && (
+          <div
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            className="pointer-events-none absolute inset-y-0 left-3 right-3 hidden items-center justify-between lg:flex"
+          >
+            <button
+              type="button"
+              aria-label="Previous note"
+              title="Previous note"
+              onClick={(event) => {
+                event.stopPropagation();
+                cycleVisibleNote(seed, -1);
+              }}
+              className="pointer-events-auto grid h-10 w-10 -translate-x-1 place-items-center rounded-full bg-[var(--td-bg)]/35 text-2xl leading-none text-[var(--td-text-soft)] opacity-0 backdrop-blur transition duration-300 ease-out hover:bg-[var(--td-bg)]/55 hover:text-[var(--td-text)] group-hover:translate-x-0 group-hover:opacity-35 group-focus:translate-x-0 group-focus:opacity-35 group-focus-within:translate-x-0 group-focus-within:opacity-35 focus-visible:translate-x-0 focus-visible:opacity-70"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="Next note"
+              title="Next note"
+              onClick={(event) => {
+                event.stopPropagation();
+                cycleVisibleNote(seed, 1);
+              }}
+              className="pointer-events-auto grid h-10 w-10 translate-x-1 place-items-center rounded-full bg-[var(--td-bg)]/35 text-2xl leading-none text-[var(--td-text-soft)] opacity-0 backdrop-blur transition duration-300 ease-out hover:bg-[var(--td-bg)]/55 hover:text-[var(--td-text)] group-hover:translate-x-0 group-hover:opacity-35 group-focus:translate-x-0 group-focus:opacity-35 group-focus-within:translate-x-0 group-focus-within:opacity-35 focus-visible:translate-x-0 focus-visible:opacity-70"
+            >
+              ›
+            </button>
+          </div>
+        )}
+
+        <h2
+          className={[
+            "min-w-0 text-xl font-semibold leading-8 transition-colors duration-300",
+            titleWeightClass,
+            titleHeatClass,
+          ].join(" ")}
+        >
           {seed.title}
         </h2>
 
         <div
           className={[
-            "relative mt-6 overflow-hidden transition-[max-height] duration-300 ease-out",
+            "relative mt-6 overflow-hidden transition-[max-height] duration-350 ease-[cubic-bezier(0.22,1,0.36,1)]",
             isExpanded ? "max-h-[42rem]" : "max-h-40 sm:max-h-44",
           ].join(" ")}
         >
           <p
             className={[
-              "whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-8 text-[var(--td-text)] transition duration-200 ease-out sm:text-base sm:leading-8",
+              "whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-8 text-[var(--td-text)] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:text-base sm:leading-8",
               isTransitioning
                 ? transitionDirectionBySeed[seed.id] === 1
-                  ? "-translate-x-2 opacity-35"
-                  : "translate-x-2 opacity-35"
+                  ? "-translate-x-3 opacity-30"
+                  : "translate-x-3 opacity-30"
                 : "translate-x-0 opacity-100",
             ].join(" ")}
           >
